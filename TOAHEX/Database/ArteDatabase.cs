@@ -347,6 +347,12 @@ namespace TOAHEX
             return names;
         }
 
+        public static int[] GetArteIdsForChar(int charIndex)
+        {
+            if (charIndex < 0 || charIndex >= _charArteIds.Length) return new int[0];
+            return _charArteIds[charIndex];
+        }
+
         public static List<(int id, string jp, string cn)> GetAll()
         {
             return _data.Value.Select(kv => (kv.Key, kv.Value.jp, kv.Value.cn)).ToList();

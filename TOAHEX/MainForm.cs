@@ -49,7 +49,7 @@ namespace TOAHEX
 
             tabGlobal.Text = LangText("全局数据", "全局データ");
             tabCharacter.Text = LangText("角色编辑", "キャラ編集");
-            tabItems.Text = LangText("道具管理", "アイテム管理");
+            tabItems.Text = LangText("背包管理", "バッグ管理");
             tabCooking.Text = LangText("料理修改", "料理編集");
             tabSystem.Text = LangText("系统数据", "システムデータ");
             tabFSChamber.Text = LangText("谱石管理", "FSチャンバー");
@@ -91,7 +91,7 @@ namespace TOAHEX
                 aboutForm.FormBorderStyle = FormBorderStyle.FixedDialog;
                 aboutForm.MaximizeBox = false;
                 aboutForm.MinimizeBox = false;
-                aboutForm.Size = new Size(320, 220);
+                aboutForm.Size = new Size(380, 300);
                 try { aboutForm.Icon = this.Icon; } catch { }
 
                 var picIcon = new PictureBox();
@@ -135,13 +135,27 @@ namespace TOAHEX
                     "TOAHEX\nTales of the Abyss Save Editor\n\n作者: 云水扶摇|passerby",
                     "TOAHEX\nTales of the Abyss Save Editor\n\n作者: 云水扶摇|passerby");
                 lblInfo.Location = new Point(80, 20);
-                lblInfo.Size = new Size(200, 100);
+                lblInfo.Size = new Size(270, 80);
                 aboutForm.Controls.Add(lblInfo);
+
+                var lblGithub = new LinkLabel();
+                lblGithub.Text = LangText("项目仓库", "プロジェクトリポジトリ");
+                lblGithub.Location = new Point(80, 105);
+                lblGithub.Size = new Size(270, 20);
+                lblGithub.LinkClicked += (s, args) => { try { System.Diagnostics.Process.Start("https://github.com/yunshuifuyao-ship-it/TOAHEX-Tales-of-The-Abyss-Save-Editor"); } catch { } };
+                aboutForm.Controls.Add(lblGithub);
+
+                var lblDonate = new LinkLabel();
+                lblDonate.Text = LangText("捐赠（爱发电）", "寄付（愛発電）");
+                lblDonate.Location = new Point(80, 130);
+                lblDonate.Size = new Size(270, 20);
+                lblDonate.LinkClicked += (s, args) => { try { System.Diagnostics.Process.Start("https://ifdian.net/a/YunShuifuyao"); } catch { } };
+                aboutForm.Controls.Add(lblDonate);
 
                 var btnOk = new Button();
                 btnOk.Text = LangText("确定", "OK");
                 btnOk.Size = new Size(80, 26);
-                btnOk.Location = new Point(110, 140);
+                btnOk.Location = new Point(140, 220);
                 btnOk.DialogResult = DialogResult.OK;
                 aboutForm.Controls.Add(btnOk);
                 aboutForm.AcceptButton = btnOk;
@@ -787,11 +801,6 @@ namespace TOAHEX
         private void btnAllCookingMax_Click(object sender, EventArgs e)
         {
             if (_saveData == null || _saveData.Type != SaveType.ToaXxx) return;
-
-            uint cookingFlags = _saveData.ReadCookingFlags();
-            cookingFlags |= 0x1FFFFFEu;
-            _saveData.WriteCookingFlags(cookingFlags);
-
             for (int c = 1; c <= 7; c++)
             {
                 for (int r = 0; r < 20; r++)
@@ -799,9 +808,6 @@ namespace TOAHEX
                     _saveData.WriteCookingMastery(c, r, 60);
                 }
             }
-
-            LoadCookingData();
-
             MessageBox.Show(LangText("所有角色料理已满级！", "全キャラクターの料理をマスターしました！"), LangText("完成", "完了"), MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
@@ -1172,7 +1178,8 @@ namespace TOAHEX
             try
             {
                 int slot = (int)((Button)sender).Tag;
-                using (var dlg = new ArteSelectForm())
+                int charIdx = cmbCharSelect.SelectedIndex + 1;
+                using (var dlg = new ArteSelectForm(charIdx))
                 {
                     if (dlg.ShowDialog(this) == DialogResult.OK && dlg.SelectedArteId >= 0)
                     {
@@ -1181,16 +1188,6 @@ namespace TOAHEX
                         string prefix = LangText("快捷", "ショートカット");
                         string empty = LangText("(空)", "(空)");
                         lblArte[slot].Text = string.Format("{0}{1}: {2}", prefix, slot + 1, _arteIds[slot] == 0 ? empty : arteName);
-
-                        if (_saveData != null)
-                        {
-                            int idx = cmbCharSelect.SelectedIndex + 1;
-                            if (idx >= 1 && idx <= 7)
-                            {
-                                int baseOff = _saveData.GetCharBaseOffset(idx);
-                                _saveData.WriteU16(baseOff + SaveOffsets.CHAR_ARTE_ARRAY + slot * 2, _arteIds[slot]);
-                            }
-                        }
                     }
                 }
             }

@@ -735,7 +735,7 @@ namespace TOAHEX
             }
 
             var lblArteLearned = new Label();
-            lblArteLearned.Text = LangText("已学习特技:", "習得特技:");
+            lblArteLearned.Text = LangText("已学习术技:", "習得術技:");
             lblArteLearned.Location = new Point(6, 110);
             lblArteLearned.Size = new Size(80, 18);
             this.subTabArtes.Controls.Add(lblArteLearned);
@@ -1133,7 +1133,7 @@ namespace TOAHEX
             this.tabItems.Padding = new Padding(3);
             this.tabItems.Size = new Size(760, 495);
             this.tabItems.TabIndex = 2;
-            this.tabItems.Text = LangText("道具管理", "アイテム管理");
+            this.tabItems.Text = LangText("背包管理", "バッグ管理");
             this.tabItems.UseVisualStyleBackColor = true;
 
             var lblCat = new Label();
