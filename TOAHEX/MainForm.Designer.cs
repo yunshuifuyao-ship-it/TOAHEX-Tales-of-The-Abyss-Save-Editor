@@ -360,7 +360,7 @@ namespace TOAHEX
             grpParty.Anchor = AnchorStyles.Top | AnchorStyles.Left;
 
             this.cmbPartySlot = new ComboBox[8];
-            string[] partyCharNames = { LangText("(空)", "(空)"), "Luke", "Tear", "Jade", "Anise", "Guy", "Natalia", "Asch" };
+            string[] partyCharNames = { LangText("(空)", "(空)"), "卢克", "缇娅", "杰德", "阿妮丝", "凯", "娜塔莉亚", "阿修" };
             for (int i = 0; i < 8; i++)
             {
                 var lblSlot = new Label();
@@ -388,7 +388,7 @@ namespace TOAHEX
             this.cmbLeader.Location = new Point(252, 44);
             this.cmbLeader.Size = new Size(110, 22);
             this.cmbLeader.DropDownStyle = ComboBoxStyle.DropDownList;
-            this.cmbLeader.Items.AddRange(new object[] { "Luke", "Tear", "Jade", "Anise", "Guy", "Natalia", "Asch" });
+            this.cmbLeader.Items.AddRange(new object[] { "卢克", "缇娅", "杰德", "阿妮丝", "凯", "娜塔莉亚", "阿修" });
             this.cmbLeader.SelectedIndexChanged += new System.EventHandler(this.cmbLeader_SelectedIndexChanged);
             grpParty.Controls.Add(this.cmbLeader);
 
@@ -862,7 +862,7 @@ namespace TOAHEX
             this.cmbFSCharSelect.Location = new Point(85, 8);
             this.cmbFSCharSelect.Size = new Size(130, 20);
             this.cmbFSCharSelect.DropDownStyle = ComboBoxStyle.DropDownList;
-            this.cmbFSCharSelect.Items.AddRange(new object[] { "Luke", "Tear", "Jade", "Anise", "Guy", "Natalia", "Asch" });
+            this.cmbFSCharSelect.Items.AddRange(new object[] { "卢克", "缇娅", "杰德", "阿妮丝", "凯", "娜塔莉亚", "阿修" });
             this.cmbFSCharSelect.SelectedIndexChanged += new System.EventHandler(this.cmbFSCharSelect_SelectedIndexChanged);
             this.tabFSChamber.Controls.Add(this.cmbFSCharSelect);
 
@@ -997,7 +997,7 @@ namespace TOAHEX
             this.cmbCookingChar.Location = new Point(385, 33);
             this.cmbCookingChar.Size = new Size(100, 20);
             this.cmbCookingChar.DropDownStyle = ComboBoxStyle.DropDownList;
-            this.cmbCookingChar.Items.AddRange(new object[] { "Luke", "Tear", "Jade", "Anise", "Guy", "Natalia", "Asch" });
+            this.cmbCookingChar.Items.AddRange(new object[] { "卢克", "缇娅", "杰德", "阿妮丝", "凯", "娜塔莉亚", "阿修" });
             this.cmbCookingChar.SelectedIndex = 0;
             this.cmbCookingChar.SelectedIndexChanged += new System.EventHandler(this.cmbCookingChar_SelectedIndexChanged);
             this.tabCooking.Controls.Add(this.cmbCookingChar);
@@ -1100,7 +1100,7 @@ namespace TOAHEX
             grpCharUsage.Anchor = AnchorStyles.Top | AnchorStyles.Left;
 
             this.numToasysCharUsage = new NumericUpDown[7];
-            string[] charNames = { "Luke", "Tear", "Jade", "Anise", "Guy", "Natalia", "Asch" };
+            string[] charNames = { "卢克", "缇娅", "杰德", "阿妮丝", "凯", "娜塔莉亚", "阿修" };
             int[] charOffsets = { 0x40, 0x44, 0x48, 0x4C, 0x50, 0x54, 0x58 };
 
             for (int i = 0; i < 7; i++)
