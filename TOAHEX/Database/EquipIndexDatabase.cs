@@ -9,25 +9,25 @@ namespace TOAHEX
         private static readonly string[][] CharWeaponSubCategories = new string[8][]
         {
             null,
-            new[] { "剣" },
+            new[] { "剣", "剑" },
             new[] { "杖" },
             new[] { "杖" },
-            new[] { "槍" },
-            new[] { "剣" },
+            new[] { "槍", "枪" },
+            new[] { "剣", "剑" },
             new[] { "弓" },
-            new[] { "剣" },
+            new[] { "剣", "剑" },
         };
 
         private static readonly string[][] CharArmorSubCategories = new string[8][]
         {
             null,
-            new[] { "鎧" },
-            new[] { "ローブ" },
-            new[] { "クローク" },
-            new[] { "ガード" },
-            new[] { "鎧" },
-            new[] { "ガード" },
-            new[] { "ローブ" },
+            new[] { "鎧", "铠" },
+            new[] { "ローブ", "长袍" },
+            new[] { "クローク", "斗篷" },
+            new[] { "ガード", "护甲" },
+            new[] { "鎧", "铠" },
+            new[] { "ガード", "护甲" },
+            new[] { "ローブ", "长袍" },
         };
 
         private static readonly int[] AccessoryTypeCodes = new int[] { 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C };

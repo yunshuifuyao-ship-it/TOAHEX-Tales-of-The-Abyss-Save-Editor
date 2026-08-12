@@ -138,12 +138,19 @@ namespace TOAHEX
 
             string target = filePath ?? _filePath;
 
+            // 如果加载的是 .bak 文件，保存时生成去掉 .bak 后缀的文件
+            if (target.EndsWith(".bak", StringComparison.OrdinalIgnoreCase))
+            {
+                target = target.Substring(0, target.Length - 4);
+            }
+
+            // .bak 备份文件永不更新：仅在不存在时创建一次
             string backupPath = target + ".bak";
             try
             {
-                if (System.IO.File.Exists(target))
+                if (!System.IO.File.Exists(backupPath) && System.IO.File.Exists(target))
                 {
-                    System.IO.File.Copy(target, backupPath, true);
+                    System.IO.File.Copy(target, backupPath, false);
                 }
             }
             catch { }

@@ -815,7 +815,7 @@ namespace TOAHEX
 
         #region 角色编辑页
 
-        private static readonly string[] CharNames = { "", "Luke", "Tear", "Jade", "Anise", "Guy", "Natalia", "Asch" };
+        private static readonly string[] CharNames = { "", "卢克", "缇娅", "杰德", "阿妮丝", "凯", "娜塔莉亚", "阿修" };
 
         private void LoadCharacterData()
         {
@@ -1674,7 +1674,7 @@ namespace TOAHEX
                 try { SetNumericSafe(numToasysSysFlag2, _saveData.ReadU32(SaveOffsets.TOASYS_SYS_FLAG2)); } catch { }
                 try { SetNumericSafe(numToasysSysFlag3, _saveData.ReadU32(SaveOffsets.TOASYS_SYS_FLAG3)); } catch { }
                 try { SetNumericSafe(numToasysEncounter, _saveData.ReadU32(SaveOffsets.TOASYS_ENCOUNTER)); } catch { }
-                string[] charNames = { "Luke", "Tear", "Jade", "Anise", "Guy", "Natalia", "Asch" };
+                string[] charNames = { "卢克", "缇娅", "杰德", "阿妮丝", "凯", "娜塔莉亚", "阿修" };
                 for (int i = 0; i < 7; i++)
                 {
                     try { SetNumericSafe(numToasysCharUsage[i], _saveData.ReadU32(SaveOffsets.TOASYS_CHAR_USAGE + i * 4)); } catch { }
