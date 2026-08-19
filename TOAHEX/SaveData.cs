@@ -62,6 +62,47 @@ namespace TOAHEX
             set => WriteFloat(SaveOffsets.BODY_GRADE_TOTAL, value);
         }
 
+        // 赌场 Grade 余额整数缓存 = 脚本变量 #773（进赌场时被 0xABA4 重算覆盖，非源头）
+        public uint CasinoGrade
+        {
+            get => ReadU32(SaveOffsets.SCRIPT_VARS + SaveOffsets.SCRIPT_VAR_GRADE * 8 + 4);
+            set => WriteU32(SaveOffsets.SCRIPT_VARS + SaveOffsets.SCRIPT_VAR_GRADE * 8 + 4, value);
+        }
+
+        // 0xABA4 赌场 Grade 余额定点数（×100，含 2 位小数）。游戏显示 = floor(/100)，唯一源头。
+        public uint CasinoGradePoint
+        {
+            get => ReadU32(SaveOffsets.BODY_GRADE_CASINO);
+            set => WriteU32(SaveOffsets.BODY_GRADE_CASINO, value);
+        }
+
+        // 赌场 Grade 余额（整数，= floor(0xABA4/100)，游戏实际显示值）
+        public uint CasinoGradeDisplay
+        {
+            get => ReadU32(SaveOffsets.BODY_GRADE_CASINO) / 100;
+        }
+
+        // 写赌场 Grade 余额：写 0xABA4（保留原小数 0.xx），并同步 var#773 整数缓存
+        public void WriteCasinoGrade(uint grade)
+        {
+            uint frac = ReadU32(SaveOffsets.BODY_GRADE_CASINO) % 100;
+            WriteU32(SaveOffsets.BODY_GRADE_CASINO, grade * 100 + frac);
+            WriteU32(SaveOffsets.SCRIPT_VARS + SaveOffsets.SCRIPT_VAR_GRADE * 8 + 4, grade);
+        }
+
+        // 脚本变量类型 tag（0x200=int 有效；其他=脚本复用后的垃圾值，勿信）
+        public uint ReadScriptVarTag(int index)
+        {
+            return ReadU32(SaveOffsets.SCRIPT_VARS + index * 8);
+        }
+
+        // 赌场筹码 = 脚本变量 #271（赌场菜单显示的持有筹码数）
+        public uint CasinoChips
+        {
+            get => ReadU32(SaveOffsets.SCRIPT_VARS + SaveOffsets.SCRIPT_VAR_CHIPS * 8 + 4);
+            set => WriteU32(SaveOffsets.SCRIPT_VARS + SaveOffsets.SCRIPT_VAR_CHIPS * 8 + 4, value);
+        }
+
         public uint PartyCount
         {
             get => ReadU32(SaveOffsets.HEAD_PARTY_COUNT);

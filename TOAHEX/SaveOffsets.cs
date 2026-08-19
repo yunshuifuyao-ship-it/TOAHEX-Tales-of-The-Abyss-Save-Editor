@@ -170,6 +170,20 @@ namespace TOAHEX
         // 0xB088 = 累计获得 Grade（+= 战斗获得，上限 10,000,000），两者语义不同
         public const int BODY_GRADE = 0xB080;
         public const int BODY_GRADE_TOTAL = 0xB088;
+        // 赌场 Grade 余额（定点数 ×100，含 2 位小数）：赌场菜单显示的 Grade = floor(此值/100)。
+        // 实测（2026-08-19 E/F 差分验证）：此值才是唯一源头；var#773(0x43CD) 只是整数缓存，
+        // 进赌场时被此值重算覆盖。守恒式 0xABA4/100 + 筹码×10 = 战斗Grade - 商店已花费。
+        public const int BODY_GRADE_CASINO = 0xABA4;
+
+        // 脚本变量区（file 0x2BA1 起 32KB=4095 个 8 字节条目 [tag u32][value u32]，sub_34ACB4 分配 dword_53A3B8）。
+        // 赌场实测（2026-08-19，用户以 10Grade↔1筹码 兑换制造差分，五档验证）：
+        //   var#271 = 赌场筹码（游戏内赌场菜单显示的持有数）
+        //   var#773 = 赌场 Grade 余额（游戏内赌场显示的 Grade；兑换只扣此变量，0xB080/0xB088 不变）
+        //   var#774 = 兑换相关计数器（语义未完全确认，只读展示）
+        public const int SCRIPT_VARS = 0x2BA1;
+        public const int SCRIPT_VAR_CHIPS = 271;
+        public const int SCRIPT_VAR_GRADE = 773;
+        public const int SCRIPT_VAR_EXCHANGE = 774;
 
         // TOASYS 布局（sub_37D584 保存 / sub_3A9840 加载；数据区 = 运行时结构 unk_53C924 镜像）
         // 2026-08-19 双存档 diff + 用户记录交叉验证 + IDA（sub_333800 菜单构建/sub_199xxx 统计API族）定案：

@@ -281,30 +281,33 @@ namespace TOAHEX
 
             ey += 28;
 
-            var lblGradeTotal = new Label();
-            lblGradeTotal.Text = LangText("累计Grade(只读):", "累計Grade(読取専用):");
-            lblGradeTotal.Location = new Point(10, ey + 2);
-            lblGradeTotal.Size = new Size(84, 18);
-            grpEdit.Controls.Add(lblGradeTotal);
+            // 赌场筹码（脚本变量 #271，赌场菜单显示的持有数）
+            var lblCasinoChips = new Label();
+            lblCasinoChips.Text = LangText("赌场筹码:", "カジノチップ:");
+            lblCasinoChips.Location = new Point(10, ey + 2);
+            lblCasinoChips.Size = new Size(84, 18);
+            grpEdit.Controls.Add(lblCasinoChips);
 
-            // 0xB088 累计获得 Grade（游戏 sub_2AA6D0 独立累计，与持有量语义不同，故只读展示）
-            this.numGradeTotal = new NumericUpDown();
-            this.numGradeTotal.Location = new Point(95, ey);
-            this.numGradeTotal.Size = new Size(200, 20);
-            this.numGradeTotal.Minimum = 0;
-            this.numGradeTotal.Maximum = 9999999;
-            this.numGradeTotal.ReadOnly = true;
-            grpEdit.Controls.Add(this.numGradeTotal);
+            this.numCasinoChips = new NumericUpDown();
+            this.numCasinoChips.Location = new Point(95, ey);
+            this.numCasinoChips.Size = new Size(200, 20);
+            this.numCasinoChips.Minimum = 0;
+            this.numCasinoChips.Maximum = 99999999;
+            this.numCasinoChips.ValueChanged += new System.EventHandler(this.numCasinoChips_ValueChanged);
+            grpEdit.Controls.Add(this.numCasinoChips);
 
-            // 难度（原队伍编排组移入此处，双写 0x7D0+0xABF3）
+            ey += 28;
+
+            // 难度（原队伍编排组移入此处，双写 0x7D0+0xABF3）。
+            // 必须走流式布局：此前固定 y=190 与"累计Grade"行重叠且被其遮挡（后加控件沉底）
             var lblDiffEdit = new Label();
             lblDiffEdit.Text = LangText("难度:", "難易度:");
-            lblDiffEdit.Location = new Point(10, 192);
+            lblDiffEdit.Location = new Point(10, ey + 2);
             lblDiffEdit.Size = new Size(80, 18);
             grpEdit.Controls.Add(lblDiffEdit);
 
             this.cmbDifficulty = new ComboBox();
-            this.cmbDifficulty.Location = new Point(95, 190);
+            this.cmbDifficulty.Location = new Point(95, ey);
             this.cmbDifficulty.Size = new Size(200, 22);
             this.cmbDifficulty.DropDownStyle = ComboBoxStyle.DropDownList;
             this.cmbDifficulty.Items.AddRange(new object[] { LangText("普通", "ノーマル"), LangText("困难", "ハード"), LangText("狂热", "マニア"), LangText("未知", "アンノウン") });
@@ -583,8 +586,8 @@ namespace TOAHEX
             btnStatToggle.AutoSize = true;
             btnStatToggle.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             btnStatToggle.Padding = new Padding(8, 2, 8, 2);
-            btnStatToggle.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            btnStatToggle.Location = new Point(250, 368);
+            btnStatToggle.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
+            btnStatToggle.Location = new Point(12, 368);
             btnStatToggle.Click += new System.EventHandler(this.btnStatToggle_Click);
             grpBasic.Controls.Add(this.btnStatToggle);
 
@@ -1326,6 +1329,7 @@ namespace TOAHEX
         private NumericUpDown numEncount;
         private NumericUpDown numHit;
         private NumericUpDown numGrade;
+        private NumericUpDown numCasinoChips;
         private Label lblVersion;
         private Label lblDifficulty;
         private Label lblPartyCount;
@@ -1336,7 +1340,6 @@ namespace TOAHEX
 
         private Button btnJournalAll;
         private Button btnItemBookAll;
-        private NumericUpDown numGradeTotal;
 
         private Button btnGetAllEquip;
 

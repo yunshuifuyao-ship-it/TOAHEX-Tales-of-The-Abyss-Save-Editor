@@ -533,8 +533,16 @@ namespace TOAHEX
                 try { SetNumericSafe(numEncount, _saveData.ReadU32(SaveOffsets.HEAD_ENCOUNTER)); } catch { }
                 try { SetNumericSafe(numHit, _saveData.ReadU32(SaveOffsets.HEAD_HIT)); } catch { }
 
-                try { decimal gradeVal = (decimal)_saveData.Grade; if (gradeVal < numGrade.Minimum) gradeVal = numGrade.Minimum; if (gradeVal > numGrade.Maximum) gradeVal = numGrade.Maximum; numGrade.Value = gradeVal; } catch { numGrade.Value = 0; }
-                try { decimal gradeTotal = (decimal)_saveData.TotalGrade; if (gradeTotal < numGradeTotal.Minimum) gradeTotal = numGradeTotal.Minimum; if (gradeTotal > numGradeTotal.Maximum) gradeTotal = numGradeTotal.Maximum; numGradeTotal.Value = gradeTotal; } catch { numGradeTotal.Value = 0; }
+                // Grade：赌场余额（0xABA4 定点数，游戏显示 floor(/100)），此值是唯一源头。
+                try
+                {
+                    decimal gradeVal = (decimal)_saveData.CasinoGradeDisplay;
+                    if (gradeVal < numGrade.Minimum) gradeVal = numGrade.Minimum;
+                    if (gradeVal > numGrade.Maximum) gradeVal = numGrade.Maximum;
+                    numGrade.Value = gradeVal;
+                }
+                catch { numGrade.Value = 0; }
+                try { SetNumericSafe(numCasinoChips, _saveData.CasinoChips); } catch { }
 
                 try
                 {
@@ -622,7 +630,15 @@ namespace TOAHEX
         private void numGrade_ValueChanged(object sender, EventArgs e)
         {
             if (_loading || _saveData == null) return;
-            _saveData.Grade = (float)numGrade.Value;
+            // 写 0xABA4（赌场余额定点数，唯一源头，保留小数 0.xx）并同步 var#773 整数缓存。
+            // 不再写 0xB080/0xB088（那是战斗 Grade，与赌场余额无关）。
+            _saveData.WriteCasinoGrade((uint)numGrade.Value);
+        }
+
+        private void numCasinoChips_ValueChanged(object sender, EventArgs e)
+        {
+            if (_loading || _saveData == null) return;
+            _saveData.CasinoChips = (uint)numCasinoChips.Value;
         }
 
         private void chkCCore_CheckedChanged(object sender, EventArgs e)
