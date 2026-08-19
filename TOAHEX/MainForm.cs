@@ -13,9 +13,12 @@ namespace TOAHEX
     {
         private SaveData _saveData;
         private bool _loading;
+        private bool _showCombatStats; // 基础/战斗属性面板切换状态（false=显示基础）
+        private readonly int[] _lastCharLevel = new int[9]; // 各角色 UI 上次显示的等级（等级联动成长用）
         private ushort[] _arteIds = new ushort[4];
         private uint _currentTitleIndex;
         private Image[] _charPortraits;
+        private ItemWheelFilter _itemWheelFilter;
 
         public MainForm()
         {
@@ -24,6 +27,16 @@ namespace TOAHEX
             LoadCharPortraits();
             LoadDatData();
             LanguageConfig.LanguageChanged += OnLanguageChanged;
+            // 全局捕获滚轮消息：悬停背包"数量"列滚动滚轮直接增减该道具数量
+            _itemWheelFilter = new ItemWheelFilter(this);
+            Application.AddMessageFilter(_itemWheelFilter);
+        }
+
+        protected override void OnFormClosed(FormClosedEventArgs e)
+        {
+            if (_itemWheelFilter != null)
+                Application.RemoveMessageFilter(_itemWheelFilter);
+            base.OnFormClosed(e);
         }
 
         private void OnLanguageChanged(object sender, EventArgs e)
@@ -38,6 +51,7 @@ namespace TOAHEX
             menuFileOpen.Text = LangText("打开", "開く");
             menuFileSave.Text = LangText("保存", "保存");
             menuFileExit.Text = LangText("退出", "終了");
+            if (btnCharName != null) btnCharName.Text = LangText("更改角色名...", "キャラ名変更...");
             menuLanguage.Text = LangText("语言", "言語");
             menuLangCN.Text = LangText("中文", "中文");
             menuLangJP.Text = LangText("日文", "日本語");
@@ -54,12 +68,14 @@ namespace TOAHEX
             tabSystem.Text = LangText("系统数据", "システムデータ");
             tabFSChamber.Text = LangText("谱石管理", "FSチャンバー");
 
-            subTabStats.Text = LangText("基础属性", "基本ステータス");
-            tabSubCombat.Text = LangText("战斗属性", "戦闘属性");
+            subTabStats.Text = LangText("角色属性", "キャラステータス");
             subTabEquip.Text = LangText("装备", "装備");
             subTabArtes.Text = LangText("术技", "アーツ");
-            subTabADSkill.Text = LangText("AD技能", "ADスキル");
+            subTabADSkill.Text = LangText("附加技能", "追加スキル");
             subTabTitle.Text = LangText("称号", "称号");
+
+            lblItemWheelHint.Text = LangText("悬停数量列滚动滚轮调整数量（Ctrl×10）", "数量列にカーソルを合わせホイールで調整（Ctrl×10）");
+            btnAllItemsMax.Text = LangText("所有道具全满", "全アイテム最大");
 
             if (_saveData != null)
             {
@@ -280,7 +296,8 @@ namespace TOAHEX
             {
                 using (var dlg = new OpenFileDialog())
                 {
-                    dlg.Filter = LangText("TOA存档文件|TOA_*;TOASYS|所有文件|*.*", "TOAセーブファイル|TOA_*;TOASYS|すべてのファイル|*.*");
+                    // TOASB 为游戏备份存档（sub_36C4C0 使用 "TOASB%03d" 命名，格式与 TOA_*/TOASYS 相同，按大小识别）
+                    dlg.Filter = LangText("TOA存档文件|TOA_*;TOASYS;TOASB*|所有文件|*.*", "TOAセーブファイル|TOA_*;TOASYS;TOASB*|すべてのファイル|*.*");
                     dlg.Title = LangText("打开存档文件", "セーブファイルを開く");
                     if (dlg.ShowDialog() != DialogResult.OK) return;
                     LoadSaveFile(dlg.FileName);
@@ -334,6 +351,110 @@ namespace TOAHEX
             Close();
         }
 
+        private void menuEditCharName_Click(object sender, EventArgs e)
+        {
+            if (_saveData == null || _saveData.Type != SaveType.ToaXxx)
+            {
+                MessageBox.Show(LangText("请先打开 TOA_XXX 存档。", "先にTOA_XXXセーブデータを開いてください。"), LangText("提示", "情報"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            // 动态构建改名对话框（避免新增窗体文件）
+            using (var dlg = new Form())
+            {
+                dlg.Text = LangText("更改角色名", "キャラ名変更");
+                dlg.StartPosition = FormStartPosition.CenterParent;
+                dlg.FormBorderStyle = FormBorderStyle.FixedDialog;
+                dlg.MaximizeBox = false;
+                dlg.MinimizeBox = false;
+                dlg.ClientSize = new Size(380, 168);
+                try { dlg.Icon = this.Icon; } catch { }
+
+                var lblChar = new Label();
+                lblChar.Text = LangText("角色", "キャラ");
+                lblChar.Location = new Point(14, 16);
+                lblChar.AutoSize = true;
+                dlg.Controls.Add(lblChar);
+
+                var cmbChar = new ComboBox();
+                cmbChar.DropDownStyle = ComboBoxStyle.DropDownList;
+                cmbChar.Location = new Point(100, 12);
+                cmbChar.Size = new Size(150, 21);
+                for (int i = 1; i <= 7; i++)
+                    cmbChar.Items.Add(CharNames[i]);
+                // 默认选中角色页当前选中的角色（若有）
+                int current = (cmbCharSelect != null && cmbCharSelect.SelectedIndex >= 0 && cmbCharSelect.SelectedIndex < 7)
+                    ? cmbCharSelect.SelectedIndex : 0;
+                cmbChar.SelectedIndex = current;
+                dlg.Controls.Add(cmbChar);
+
+                var lblCurrent = new Label();
+                lblCurrent.Text = LangText("当前名称", "現在の名前");
+                lblCurrent.Location = new Point(14, 51);
+                lblCurrent.AutoSize = true;
+                dlg.Controls.Add(lblCurrent);
+
+                var txtCurrent = new TextBox();
+                txtCurrent.ReadOnly = true;
+                txtCurrent.Location = new Point(100, 47);
+                txtCurrent.Size = new Size(250, 21);
+                dlg.Controls.Add(txtCurrent);
+
+                var lblNew = new Label();
+                lblNew.Text = LangText("新名称", "新しい名前");
+                lblNew.Location = new Point(14, 86);
+                lblNew.AutoSize = true;
+                dlg.Controls.Add(lblNew);
+
+                var txtNew = new TextBox();
+                txtNew.Location = new Point(100, 82);
+                txtNew.Size = new Size(250, 21);
+                txtNew.MaxLength = 15;
+                dlg.Controls.Add(txtNew);
+
+                // 随下拉切换刷新当前名称显示
+                cmbChar.SelectedIndexChanged += (s2, e2) =>
+                {
+                    int idx = cmbChar.SelectedIndex + 1;
+                    txtCurrent.Text = idx >= 1 && idx <= 7 ? _saveData.ReadCharName(idx) : string.Empty;
+                };
+                txtCurrent.Text = _saveData.ReadCharName(cmbChar.SelectedIndex + 1);
+
+                var btnOk = new Button();
+                btnOk.Text = LangText("确定", "OK");
+                btnOk.Location = new Point(180, 124);
+                btnOk.Size = new Size(85, 28);
+                dlg.Controls.Add(btnOk);
+                dlg.AcceptButton = btnOk;
+
+                var btnCancel = new Button();
+                btnCancel.Text = LangText("取消", "キャンセル");
+                btnCancel.Location = new Point(272, 124);
+                btnCancel.Size = new Size(85, 28);
+                btnCancel.DialogResult = DialogResult.Cancel;
+                dlg.Controls.Add(btnCancel);
+                dlg.CancelButton = btnCancel;
+
+                btnOk.Click += (s2, e2) =>
+                {
+                    int idx = cmbChar.SelectedIndex + 1;
+                    string error;
+                    if (_saveData.WriteCharName(idx, txtNew.Text.Trim(), out error))
+                    {
+                        // 名字仅在对话框与 HEAD 摘要中使用，保存时 RebuildHeadSummary 会自动同步，无需刷新其他控件
+                        MessageBox.Show(LangText("角色名已更改。", "キャラ名を変更しました。"), LangText("提示", "情報"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        dlg.Close();
+                    }
+                    else
+                    {
+                        MessageBox.Show(error, LangText("错误", "エラー"), MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                };
+
+                dlg.ShowDialog(this);
+            }
+        }
+
         private void MainForm_DragEnter(object sender, DragEventArgs e)
         {
             if (e.Data.GetDataPresent(DataFormats.FileDrop))
@@ -383,6 +504,9 @@ namespace TOAHEX
             string type = _saveData.Type == SaveType.ToaXxx ? "TOA_XXX" : "TOASYS";
             bool ok = _saveData.VerifyChecksum();
             statusLabel.Text = $"{type} | {_saveData.FilePath} | {LangText("校验和", "チェックサム")}: {(ok ? LangText("通过", "OK") : LangText("失败", "NG"))}";
+            // 码表未加载时提示文本回退解码方式（已加载则保持克制不提示）
+            if (!TblCodec.IsLoaded)
+                statusLabel.Text += LangText("（码表未加载，文本按Shift-JIS解码）", "（コード表未読込、テキストはShift-JISでデコード）");
         }
 
         #region 全局数据页
@@ -396,7 +520,13 @@ namespace TOAHEX
                 SetNumericSafe(numGald, _saveData.Gald);
                 SetNumericSafe(numPlayTime, _saveData.PlayTime);
                 try { lblVersion.Text = _saveData.Version.ToString("F1"); } catch { lblVersion.Text = "-"; }
-                try { lblDifficulty.Text = _saveData.Difficulty.ToString("F1"); } catch { lblDifficulty.Text = "-"; }
+                // 0x7D0 为真实难度（0=普通 1=困难 2=狂热 3=未知），非法值显示 "-"
+                try
+                {
+                    int diffVal = _saveData.ReadU8(SaveOffsets.BODY_DIFFICULTY);
+                    lblDifficulty.Text = (diffVal >= 0 && diffVal <= 3) ? GetDifficultyName(diffVal) : "-";
+                }
+                catch { lblDifficulty.Text = "-"; }
                 try { lblPartyCount.Text = _saveData.PartyCount.ToString(); } catch { lblPartyCount.Text = "-"; }
                 try { lblLocation.Text = _saveData.LocationName; } catch { lblLocation.Text = "-"; }
 
@@ -404,14 +534,7 @@ namespace TOAHEX
                 try { SetNumericSafe(numHit, _saveData.ReadU32(SaveOffsets.HEAD_HIT)); } catch { }
 
                 try { decimal gradeVal = (decimal)_saveData.Grade; if (gradeVal < numGrade.Minimum) gradeVal = numGrade.Minimum; if (gradeVal > numGrade.Maximum) gradeVal = numGrade.Maximum; numGrade.Value = gradeVal; } catch { numGrade.Value = 0; }
-
-                try
-                {
-                    uint diffVal = _saveData.ReadU32(SaveOffsets.HEAD_DIFFICULTY);
-                    if (diffVal < 4) cmbDifficulty.SelectedIndex = (int)diffVal;
-                    else cmbDifficulty.SelectedIndex = 3;
-                }
-                catch { cmbDifficulty.SelectedIndex = 0; }
+                try { decimal gradeTotal = (decimal)_saveData.TotalGrade; if (gradeTotal < numGradeTotal.Minimum) gradeTotal = numGradeTotal.Minimum; if (gradeTotal > numGradeTotal.Maximum) gradeTotal = numGradeTotal.Maximum; numGradeTotal.Value = gradeTotal; } catch { numGradeTotal.Value = 0; }
 
                 try
                 {
@@ -438,18 +561,28 @@ namespace TOAHEX
                     }
                 }
 
+                if (cmbDifficulty != null)
+                {
+                    try
+                    {
+                        int diff = _saveData.ReadU8(SaveOffsets.BODY_DIFFICULTY);
+                        if (diff < 0 || diff > 3) diff = 0; // 非法值按普通处理
+                        cmbDifficulty.SelectedIndex = diff;
+                    }
+                    catch { cmbDifficulty.SelectedIndex = 0; }
+                }
+
+                // 领队：0x7C3 单写即生效（摘要块只覆盖 runtime[0..115]，+1656 超出范围）
                 if (cmbLeader != null)
                 {
                     try
                     {
-                        int leaderIdx = _saveData.ReadU8(SaveOffsets.BODY_LEADER);
-                        if (leaderIdx <= 0 || leaderIdx > 7) leaderIdx = 1;
-                        cmbLeader.SelectedIndex = leaderIdx - 1;
+                        int leader = _saveData.ReadU8(SaveOffsets.BODY_LEADER);
+                        if (leader < 0 || leader > 7) leader = 1; // 非法值按卢克（1-7 均合法，7=阿修，地图模型表含 ash00.npc）
+                        cmbLeader.SelectedIndex = leader;
                     }
-                    catch { cmbLeader.SelectedIndex = 0; }
+                    catch { cmbLeader.SelectedIndex = 1; }
                 }
-
-
 
             }
             finally
@@ -484,17 +617,6 @@ namespace TOAHEX
             uint hit = (uint)numHit.Value;
             _saveData.WriteU32(SaveOffsets.HEAD_HIT, hit);
             _saveData.WriteU32(SaveOffsets.BODY_HIT, hit);
-        }
-
-        private void cmbDifficulty_SelectedIndexChanged(object sender, EventArgs e)
-        {
-            if (_loading || _saveData == null) return;
-            int diffIdx = cmbDifficulty.SelectedIndex;
-            if (diffIdx >= 0 && diffIdx < 4)
-            {
-                _saveData.WriteU32(SaveOffsets.HEAD_DIFFICULTY, (uint)diffIdx);
-                _saveData.WriteU8(SaveOffsets.BODY_DIFFICULTY, (byte)diffIdx);
-            }
         }
 
         private void numGrade_ValueChanged(object sender, EventArgs e)
@@ -542,16 +664,22 @@ namespace TOAHEX
 
             try
             {
-                byte[] fill = new byte[SaveOffsets.BOOK_FLAGS_SIZE];
-                for (int i = 0; i < fill.Length; i++) fill[i] = 0xFF;
-                _saveData.WriteBytes(SaveOffsets.BOOK_FLAGS_OFFSET, fill);
+                // 按游戏真实四段布局填充（sub_37C948 保存 / sub_3A7C24 加载逐段对应）
+                byte[] mainFill = new byte[SaveOffsets.BOOK_MAIN_FLAGS_SIZE];
+                for (int i = 0; i < mainFill.Length; i++) mainFill[i] = 0xFF;
+                _saveData.WriteBytes(SaveOffsets.BOOK_MAIN_FLAGS_OFFSET, mainFill);
 
-                _saveData.WriteU8(SaveOffsets.BOOK_DETAIL_FLAGS, 0xFF);
-                _saveData.WriteU8(SaveOffsets.BOOK_DETAIL_FLAGS + 1, 0xFF);
+                byte[] subFill = new byte[SaveOffsets.BOOK_SUB_FLAGS_SIZE];
+                for (int i = 0; i < subFill.Length; i++) subFill[i] = 0xFF;
+                _saveData.WriteBytes(SaveOffsets.BOOK_SUB_FLAGS_OFFSET, subFill);
 
                 byte[] detailFill = new byte[SaveOffsets.BOOK_DETAIL_DATA_SIZE];
                 for (int i = 0; i < detailFill.Length; i++) detailFill[i] = 0x01;
                 _saveData.WriteBytes(SaveOffsets.BOOK_DETAIL_DATA, detailFill);
+
+                byte[] extraFill = new byte[SaveOffsets.BOOK_EXTRA_DATA_SIZE];
+                for (int i = 0; i < extraFill.Length; i++) extraFill[i] = 0x01;
+                _saveData.WriteBytes(SaveOffsets.BOOK_EXTRA_DATA_OFFSET, extraFill);
 
                 int itemCount = 0;
                 for (int i = 0; i < SaveOffsets.BODY_ITEM_COUNT; i++)
@@ -685,13 +813,34 @@ namespace TOAHEX
             }
         }
 
+        private void cmbDifficulty_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (_loading || _saveData == null) return;
+            int diff = cmbDifficulty.SelectedIndex;
+            if (diff < 0 || diff > 3) diff = 0;
+            _saveData.WriteU8(SaveOffsets.BODY_DIFFICULTY, (byte)diff);
+            _saveData.WriteU8(SaveOffsets.BODY_DIFFICULTY_SUMMARY, (byte)diff); // 读档时摘要块覆盖专用字节，此处在游戏内实际生效
+        }
+
         private void cmbLeader_SelectedIndexChanged(object sender, EventArgs e)
         {
             if (_loading || _saveData == null) return;
-            int leaderVal = cmbLeader.SelectedIndex + 1;
-            if (leaderVal < 1) leaderVal = 1;
-            _saveData.WriteU8(SaveOffsets.BODY_LEADER, (byte)leaderVal);
-            _saveData.WriteU8(SaveOffsets.BODY_SUB_LEADER, (byte)leaderVal);
+            int leader = cmbLeader.SelectedIndex;
+            if (leader < 0 || leader > 7) leader = 1;
+            _saveData.WriteU8(SaveOffsets.BODY_LEADER, (byte)leader);
+        }
+
+        /// <summary>难度值(0-3)转显示名，非法值返回 "-"</summary>
+        private string GetDifficultyName(int diff)
+        {
+            switch (diff)
+            {
+                case 0: return LangText("普通", "ノーマル");
+                case 1: return LangText("困难", "ハード");
+                case 2: return LangText("狂热", "マニア");
+                case 3: return LangText("未知", "アンノウン");
+                default: return "-";
+            }
         }
 
 
@@ -778,7 +927,7 @@ namespace TOAHEX
                 }
             }
             if (cmbCharSelect.SelectedIndex >= 0) RefreshCharFields();
-            MessageBox.Show(LangText("所有角色AD技能已全开！", "全キャラクターのADスキルを全解放しました！"), LangText("完成", "完了"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(LangText("所有角色附加技能已全开！", "全キャラクターの追加スキルを全解放しました！"), LangText("完成", "完了"), MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         private void btnAllFSMax_Click(object sender, EventArgs e)
@@ -809,6 +958,42 @@ namespace TOAHEX
                 }
             }
             MessageBox.Show(LangText("所有角色料理已满级！", "全キャラクターの料理をマスターしました！"), LangText("完成", "完了"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        private void btnAllItemsMax_Click(object sender, EventArgs e)
+        {
+            if (_saveData == null || _saveData.Type != SaveType.ToaXxx)
+            {
+                MessageBox.Show(LangText("请先打开 TOA_XXX 存档。", "先にTOA_XXXセーブデータを開いてください。"), LangText("提示", "情報"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            try
+            {
+                // 全满规则（与游戏 SetItemQtyWithClamp 上限一致）：
+                //   TypeCode 0x05~0x0C 武器/防具/装饰品（装备类）→ 16
+                //   TypeCode 0x00~0x04 素材/软糖/瓶/强化/特殊（可堆叠类）→ 99
+                //   跳过 ID 0（空名）与 ID ≥ 561（任务关键道具/系统道具，提前获得会破坏任务触发）
+                int equipCount = 0;
+                int stackCount = 0;
+                foreach (var item in ItemDatabase.Items.Values)
+                {
+                    if (item.Id < 1 || item.Id > 560) continue;
+                    if (string.IsNullOrEmpty(item.Name)) continue;
+                    int qty = (item.TypeCode >= 0x05 && item.TypeCode <= 0x0C) ? 16 : 99;
+                    _saveData.SetItemQuantity(item.Id, (byte)qty);
+                    if (qty == 16) equipCount++; else stackCount++;
+                }
+
+                RefreshItemsTab();
+                MessageBox.Show(string.Format(
+                    LangText("已将 {0} 个道具拉满（装备×16、消耗品×99），关键道具未改动。", "{0}個のアイテムを最大にしました（装備×16、消費アイテム×99）。キーアイテムは変更していません。"),
+                    equipCount + stackCount), LangText("提示", "情報"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(string.Format(LangText("错误：{0}", "エラー：{0}"), ex.Message), LangText("错误", "エラー"), MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
         #endregion
@@ -851,6 +1036,7 @@ namespace TOAHEX
             try
             {
                 try { SetNumericSafe(numLevel, _saveData.ReadU32(baseOff + SaveOffsets.CHAR_LEVEL) & 0xFF); } catch { numLevel.Value = numLevel.Minimum; }
+                _lastCharLevel[idx] = (int)numLevel.Value;
                 try { SetNumericSafe(numExp, _saveData.ReadU32(baseOff + SaveOffsets.CHAR_EXP)); } catch { numExp.Value = numExp.Minimum; }
                 try { SetNumericSafe(numHP, _saveData.ReadU32(baseOff + SaveOffsets.CHAR_HP)); } catch { numHP.Value = numHP.Minimum; }
                 try { SetNumericSafe(numTP, _saveData.ReadU32(baseOff + SaveOffsets.CHAR_TP)); } catch { numTP.Value = numTP.Minimum; }
@@ -867,11 +1053,7 @@ namespace TOAHEX
                 try { SetNumericSafe(numGrowthPoints, _saveData.ReadU16(baseOff + SaveOffsets.CHAR_GROWTH_POINTS)); } catch { numGrowthPoints.Value = numGrowthPoints.Minimum; }
 
                 int charIdx = cmbCharSelect.SelectedIndex + 1;
-                try { PopulateEquipCombo(cmbWeapon, charIdx, 0, _saveData.ReadU16(baseOff + SaveOffsets.CHAR_EQUIP_ARRAY + 0 * 2)); } catch { }
-                try { PopulateEquipCombo(cmbArmor, charIdx, 1, _saveData.ReadU16(baseOff + SaveOffsets.CHAR_EQUIP_ARRAY + 1 * 2)); } catch { }
-                try { PopulateEquipCombo(cmbAcc1, charIdx, 2, _saveData.ReadU16(baseOff + SaveOffsets.CHAR_EQUIP_ARRAY + 2 * 2)); } catch { }
-                try { PopulateEquipCombo(cmbAcc2, charIdx, 3, _saveData.ReadU16(baseOff + SaveOffsets.CHAR_EQUIP_ARRAY + 3 * 2)); } catch { }
-                try { PopulateKyouritsufuCombo(cmbKyouritsufu, _saveData.ReadKyouritsufu(charIdx)); } catch { }
+                try { UpdateEquipRows(charIdx, baseOff); } catch { }
 
                 if (lblArte != null)
                 {
@@ -970,110 +1152,116 @@ namespace TOAHEX
             }
         }
 
-        private void PopulateEquipCombo(ComboBox cmb, int charIndex, int slotIndex, ushort currentValue)
+        // 装备页五行显示：槽位 0-3=装备（角色块 0x88 起 4×u16），4=响律符（0x94）
+        private void UpdateEquipRows(int charIdx, int baseOff)
         {
-            try
+            if (lblEquip == null) return;
+            for (int i = 0; i < 4; i++)
             {
-                cmb.BeginUpdate();
-                cmb.Items.Clear();
-                string noneText = LangText("(无)", "(なし)");
-                cmb.Items.Add(new ComboItem { Id = 0, Name = noneText });
-
-                foreach (var item in EquipIndexDatabase.GetEquipItemsForSlot(charIndex, slotIndex))
-                {
-                    if (string.IsNullOrEmpty(item.Name)) continue;
-                    cmb.Items.Add(new ComboItem { Id = item.Id, Name = item.Name });
-                }
-
-                bool found = false;
-                for (int i = 0; i < cmb.Items.Count; i++)
-                {
-                    if (((ComboItem)cmb.Items[i]).Id == (int)currentValue)
-                    {
-                        cmb.SelectedIndex = i;
-                        found = true;
-                        break;
-                    }
-                }
-
-                if (!found)
-                {
-                    if (currentValue != 0)
-                    {
-                        string itemName = ItemDatabase.GetById(currentValue)?.Name;
-                        string display = !string.IsNullOrEmpty(itemName) ? itemName : string.Format("(ID:{0})", currentValue);
-                        cmb.Items.Add(new ComboItem { Id = (int)currentValue, Name = display });
-                        cmb.SelectedIndex = cmb.Items.Count - 1;
-                    }
-                    else
-                    {
-                        cmb.SelectedIndex = 0;
-                    }
-                }
+                int id = _saveData.ReadU16(baseOff + SaveOffsets.CHAR_EQUIP_ARRAY + i * 2);
+                lblEquip[i].Text = EquipSelectForm.SlotName(i) + ": " + ResolveEquipName(i, id);
             }
-            catch { }
-            finally
+            int kyId = _saveData.ReadKyouritsufu(charIdx);
+            lblEquip[4].Text = EquipSelectForm.SlotName(4) + ": " + ResolveEquipName(4, kyId);
+        }
+
+        private string ResolveEquipName(int slotIndex, int id)
+        {
+            if (id == 0) return LangText("(无)", "(なし)");
+            if (slotIndex == 4)
             {
-                try { cmb.EndUpdate(); } catch { }
-                if (cmb.SelectedIndex < 0 && cmb.Items.Count > 0)
-                    cmb.SelectedIndex = 0;
+                string n = KyouritsufuDatabase.GetName(id);
+                return string.IsNullOrEmpty(n) ? string.Format("(ID:{0})", id) : n;
+            }
+            string name = ItemDatabase.GetById(id)?.Name;
+            return string.IsNullOrEmpty(name) ? string.Format("(ID:{0})", id) : name;
+        }
+
+        // 更改按钮：弹出装备选择器（内嵌搜索），确定后写回存档并刷新行显示
+        private void btnEquipChange_Click(object sender, EventArgs e)
+        {
+            if (_saveData == null || _saveData.Type != SaveType.ToaXxx) return;
+            int idx = cmbCharSelect.SelectedIndex + 1;
+            if (idx < 1 || idx > 7) return;
+            int baseOff = _saveData.GetCharBaseOffset(idx);
+            if (baseOff == 0) return;
+
+            int slot = (int)((Button)sender).Tag;
+            int currentId = slot == 4
+                ? _saveData.ReadKyouritsufu(idx)
+                : _saveData.ReadU16(baseOff + SaveOffsets.CHAR_EQUIP_ARRAY + slot * 2);
+
+            using (var dlg = new EquipSelectForm(idx, slot, currentId))
+            {
+                if (dlg.ShowDialog(this) == DialogResult.OK && dlg.SelectedEquipId >= 0)
+                {
+                    int newId = dlg.SelectedEquipId;
+                    if (slot == 4)
+                        _saveData.WriteKyouritsufu(idx, (ushort)newId);
+                    else
+                        _saveData.WriteU16(baseOff + SaveOffsets.CHAR_EQUIP_ARRAY + slot * 2, (ushort)newId);
+                    lblEquip[slot].Text = EquipSelectForm.SlotName(slot) + ": " + ResolveEquipName(slot, newId);
+                }
             }
         }
 
-        private void PopulateKyouritsufuCombo(ComboBox cmb, ushort currentValue)
-        {
-            try
-            {
-                cmb.BeginUpdate();
-                cmb.Items.Clear();
-                foreach (var entry in KyouritsufuDatabase.GetAll())
-                {
-                    cmb.Items.Add(new ComboItem { Id = entry.Id, Name = entry.Name });
-                }
-                bool found = false;
-                for (int i = 0; i < cmb.Items.Count; i++)
-                {
-                    if (((ComboItem)cmb.Items[i]).Id == (int)currentValue)
-                    {
-                        cmb.SelectedIndex = i;
-                        found = true;
-                        break;
-                    }
-                }
-                if (!found)
-                {
-                    if (currentValue != 0)
-                    {
-                        string display = KyouritsufuDatabase.GetName(currentValue);
-                        if (string.IsNullOrEmpty(display)) display = string.Format("(ID:{0})", currentValue);
-                        cmb.Items.Add(new ComboItem { Id = (int)currentValue, Name = display });
-                        cmb.SelectedIndex = cmb.Items.Count - 1;
-                    }
-                    else
-                    {
-                        cmb.SelectedIndex = 0;
-                    }
-                }
-            }
-            catch { }
-            finally
-            {
-                try { cmb.EndUpdate(); } catch { }
-                if (cmb.SelectedIndex < 0 && cmb.Items.Count > 0)
-                    cmb.SelectedIndex = 0;
-            }
-        }
-
-        private void cmbKyouritsufu_SelectedIndexChanged(object sender, EventArgs e)
+        private void numLevel_ValueChanged(object sender, EventArgs e)
         {
             if (_loading || _saveData == null) return;
             int idx = cmbCharSelect.SelectedIndex + 1;
             if (idx < 1 || idx > 7) return;
-            if (cmbKyouritsufu.SelectedItem != null)
-                _saveData.WriteKyouritsufu(idx, (ushort)((ComboItem)cmbKyouritsufu.SelectedItem).Id);
+            int baseOff = _saveData.GetCharBaseOffset(idx);
+            uint packed = _saveData.ReadU32(baseOff + SaveOffsets.CHAR_LEVEL);
+            packed = (packed & 0xFFFFFF00) | ((uint)numLevel.Value & 0xFF);
+            _saveData.WriteU32(baseOff + SaveOffsets.CHAR_LEVEL, packed);
+
+            // 等级联动成长：按每级增量自动增减基础属性（近似值；读档时游戏按 sub_3E1038 重算衍生属性）
+            if (chkLevelGrowth != null && chkLevelGrowth.Checked)
+            {
+                int delta = (int)numLevel.Value - _lastCharLevel[idx];
+                if (delta != 0)
+                {
+                    ApplyLevelGrowth(baseOff, delta);
+                    RefreshCharFields(); // 重读以刷新 UI（同时更新 _lastCharLevel）
+                    return;
+                }
+            }
+            _lastCharLevel[idx] = (int)numLevel.Value;
         }
 
-        private void numLevel_ValueChanged(object sender, EventArgs e) { if (_loading || _saveData == null) return; int idx = cmbCharSelect.SelectedIndex + 1; if (idx < 1 || idx > 7) return; int baseOff = _saveData.GetCharBaseOffset(idx); uint packed = _saveData.ReadU32(baseOff + SaveOffsets.CHAR_LEVEL); packed = (packed & 0xFFFFFF00) | ((uint)numLevel.Value & 0xFF); _saveData.WriteU32(baseOff + SaveOffsets.CHAR_LEVEL, packed); }
+        private void ApplyLevelGrowth(int baseOff, int delta)
+        {
+            long hp = _saveData.ReadU32(baseOff + SaveOffsets.CHAR_HP) + delta * (int)numGrowHP.Value;
+            long mhp = _saveData.ReadU32(baseOff + SaveOffsets.CHAR_MAXHP) + delta * (int)numGrowHP.Value;
+            long tp = _saveData.ReadU32(baseOff + SaveOffsets.CHAR_TP) + delta * (int)numGrowTP.Value;
+            long mtp = _saveData.ReadU32(baseOff + SaveOffsets.CHAR_MAXTP) + delta * (int)numGrowTP.Value;
+            long patk = _saveData.ReadU32(baseOff + SaveOffsets.CHAR_PATK) + delta * (int)numGrowPATK.Value;
+            long pdef = _saveData.ReadU32(baseOff + SaveOffsets.CHAR_PDEF) + delta * (int)numGrowPDEF.Value;
+            long fatk = _saveData.ReadU32(baseOff + SaveOffsets.CHAR_FATK) + delta * (int)numGrowFATK.Value;
+            long fdef = _saveData.ReadU32(baseOff + SaveOffsets.CHAR_FDEF) + delta * (int)numGrowFDEF.Value;
+            long agi = _saveData.ReadU32(baseOff + SaveOffsets.CHAR_AGI) + delta * (int)numGrowAGI.Value;
+            long luk = _saveData.ReadU32(baseOff + SaveOffsets.CHAR_LUCK) + delta * (int)numGrowLUK.Value;
+
+            if (hp < 0) hp = 0; if (mhp < 1) mhp = 1; if (tp < 0) tp = 0; if (mtp < 1) mtp = 1;
+            if (patk < 0) patk = 0; if (pdef < 0) pdef = 0; if (fatk < 0) fatk = 0; if (fdef < 0) fdef = 0;
+            if (agi < 0) agi = 0; if (luk < 0) luk = 0;
+            if (luk > 120) luk = 120;
+
+            _saveData.WriteU32(baseOff + SaveOffsets.CHAR_HP, (uint)hp);
+            _saveData.WriteU32(baseOff + SaveOffsets.CHAR_MAXHP, (uint)mhp);
+            _saveData.WriteU32(baseOff + SaveOffsets.CHAR_TP, (uint)tp);
+            _saveData.WriteU32(baseOff + SaveOffsets.CHAR_MAXTP, (uint)mtp);
+            _saveData.WriteU32(baseOff + SaveOffsets.CHAR_PATK, (uint)patk);
+            _saveData.WriteU32(baseOff + SaveOffsets.CHAR_PDEF, (uint)pdef);
+            _saveData.WriteU32(baseOff + SaveOffsets.CHAR_FATK, (uint)fatk);
+            _saveData.WriteU32(baseOff + SaveOffsets.CHAR_FDEF, (uint)fdef);
+            _saveData.WriteU32(baseOff + SaveOffsets.CHAR_AGI, (uint)agi);
+            // 幸运：同步总和字段（0x84，游戏上限 120）
+            _saveData.WriteU32(baseOff + SaveOffsets.CHAR_LUCK, (uint)luk);
+            uint lukEquip = _saveData.ReadU32(baseOff + SaveOffsets.CHAR_EQUIP_LUK);
+            uint lukTotal = (uint)Math.Min(120, luk + lukEquip);
+            _saveData.WriteU32(baseOff + SaveOffsets.CHAR_LUCK_TOTAL, lukTotal);
+        }
         private void numExp_ValueChanged(object sender, EventArgs e) { if (_loading || _saveData == null) return; int idx = cmbCharSelect.SelectedIndex + 1; if (idx < 1 || idx > 7) return; int baseOff = _saveData.GetCharBaseOffset(idx); _saveData.WriteU32(baseOff + SaveOffsets.CHAR_EXP, (uint)numExp.Value); }
         private void numHP_ValueChanged(object sender, EventArgs e) { if (_loading || _saveData == null) return; int idx = cmbCharSelect.SelectedIndex + 1; if (idx < 1 || idx > 7) return; int baseOff = _saveData.GetCharBaseOffset(idx); _saveData.WriteU32(baseOff + SaveOffsets.CHAR_HP, (uint)numHP.Value); }
         private void numTP_ValueChanged(object sender, EventArgs e) { if (_loading || _saveData == null) return; int idx = cmbCharSelect.SelectedIndex + 1; if (idx < 1 || idx > 7) return; int baseOff = _saveData.GetCharBaseOffset(idx); _saveData.WriteU32(baseOff + SaveOffsets.CHAR_TP, (uint)numTP.Value); }
@@ -1087,6 +1275,21 @@ namespace TOAHEX
         private void numBaseLUCK_ValueChanged(object sender, EventArgs e) { if (_loading || _saveData == null) return; int idx = cmbCharSelect.SelectedIndex + 1; if (idx < 1 || idx > 7) return; _saveData.WriteLuckBase(idx, (uint)numBaseLUCK.Value); }
         private void numOvlGauge_ValueChanged(object sender, EventArgs e) { if (_loading || _saveData == null) return; int idx = cmbCharSelect.SelectedIndex + 1; if (idx < 1 || idx > 7) return; _saveData.WriteOvlGauge(idx, (ushort)numOvlGauge.Value); }
         private void numGrowthPoints_ValueChanged(object sender, EventArgs e) { if (_loading || _saveData == null) return; int idx = cmbCharSelect.SelectedIndex + 1; if (idx < 1 || idx > 7) return; int baseOff = _saveData.GetCharBaseOffset(idx); _saveData.WriteU16(baseOff + SaveOffsets.CHAR_GROWTH_POINTS, (ushort)numGrowthPoints.Value); }
+
+        // 基础/战斗属性面板互斥切换：组标题随面板变化，按钮仅切换文字（C-Core 编辑已隐藏）
+        private void btnStatToggle_Click(object sender, EventArgs e)
+        {
+            _showCombatStats = !_showCombatStats;
+            pnlStatBasic.Visible = !_showCombatStats;
+            pnlStatCombat.Visible = _showCombatStats;
+            if (_grpStats != null)
+                _grpStats.Text = _showCombatStats
+                    ? LangText("战斗属性", "戦闘ステータス")
+                    : LangText("基础属性", "基本ステータス");
+            btnStatToggle.Text = _showCombatStats
+                ? LangText("◂ 返回基础属性", "◂ 基本ステータスへ")
+                : LangText("显示战斗属性 ▸", "戦闘ステータスへ ▸");
+        }
 
         private void numCCorePATK_ValueChanged(object sender, EventArgs e) { if (_loading || _saveData == null) return; int idx = cmbCharSelect.SelectedIndex + 1; if (idx < 1 || idx > 7) return; int baseOff = _saveData.GetCharBaseOffset(idx); uint newCCore = (uint)numCCorePATK.Value; uint oldBase = _saveData.ReadU32(baseOff + SaveOffsets.CHAR_BASE_PATK); uint equipBonus = _saveData.ReadU32(baseOff + SaveOffsets.CHAR_PATK) - oldBase - _saveData.ReadU32(baseOff + SaveOffsets.CHAR_CCORE_PATK); _saveData.WriteU32(baseOff + SaveOffsets.CHAR_CCORE_PATK, newCCore); _saveData.WriteU32(baseOff + SaveOffsets.CHAR_PATK, oldBase + newCCore + equipBonus); }
         private void numCCorePDEF_ValueChanged(object sender, EventArgs e) { if (_loading || _saveData == null) return; int idx = cmbCharSelect.SelectedIndex + 1; if (idx < 1 || idx > 7) return; int baseOff = _saveData.GetCharBaseOffset(idx); uint newCCore = (uint)numCCorePDEF.Value; uint oldBase = _saveData.ReadU32(baseOff + SaveOffsets.CHAR_BASE_PDEF); uint equipBonus = _saveData.ReadU32(baseOff + SaveOffsets.CHAR_PDEF) - oldBase - _saveData.ReadU32(baseOff + SaveOffsets.CHAR_CCORE_PDEF); _saveData.WriteU32(baseOff + SaveOffsets.CHAR_CCORE_PDEF, newCCore); _saveData.WriteU32(baseOff + SaveOffsets.CHAR_PDEF, oldBase + newCCore + equipBonus); }
@@ -1105,10 +1308,6 @@ namespace TOAHEX
             _saveData.WriteU16(baseOff + SaveOffsets.CHAR_ARTE_USAGE + slot * 2, (ushort)((NumericUpDown)sender).Value);
         }
 
-        private void cmbWeapon_SelectedIndexChanged(object sender, EventArgs e) { if (_loading || _saveData == null) return; int idx = cmbCharSelect.SelectedIndex + 1; if (idx < 1 || idx > 7) return; int baseOff = _saveData.GetCharBaseOffset(idx); if (cmbWeapon.SelectedItem != null) _saveData.WriteU16(baseOff + SaveOffsets.CHAR_EQUIP_ARRAY + 0 * 2, (ushort)((ComboItem)cmbWeapon.SelectedItem).Id); }
-        private void cmbArmor_SelectedIndexChanged(object sender, EventArgs e) { if (_loading || _saveData == null) return; int idx = cmbCharSelect.SelectedIndex + 1; if (idx < 1 || idx > 7) return; int baseOff = _saveData.GetCharBaseOffset(idx); if (cmbArmor.SelectedItem != null) _saveData.WriteU16(baseOff + SaveOffsets.CHAR_EQUIP_ARRAY + 1 * 2, (ushort)((ComboItem)cmbArmor.SelectedItem).Id); }
-        private void cmbAcc1_SelectedIndexChanged(object sender, EventArgs e) { if (_loading || _saveData == null) return; int idx = cmbCharSelect.SelectedIndex + 1; if (idx < 1 || idx > 7) return; int baseOff = _saveData.GetCharBaseOffset(idx); if (cmbAcc1.SelectedItem != null) _saveData.WriteU16(baseOff + SaveOffsets.CHAR_EQUIP_ARRAY + 2 * 2, (ushort)((ComboItem)cmbAcc1.SelectedItem).Id); }
-        private void cmbAcc2_SelectedIndexChanged(object sender, EventArgs e) { if (_loading || _saveData == null) return; int idx = cmbCharSelect.SelectedIndex + 1; if (idx < 1 || idx > 7) return; int baseOff = _saveData.GetCharBaseOffset(idx); if (cmbAcc2.SelectedItem != null) _saveData.WriteU16(baseOff + SaveOffsets.CHAR_EQUIP_ARRAY + 3 * 2, (ushort)((ComboItem)cmbAcc2.SelectedItem).Id); }
 
         private void clbArteLearned_ItemCheck(object sender, ItemCheckEventArgs e)
         {
@@ -1164,10 +1363,15 @@ namespace TOAHEX
                 int titleCount = TitleDatabase.GetTitleCount(idx);
                 for (int i = 0; i < titleCount && i < clbTitles.Items.Count; i++)
                 {
-                    if (clbTitles.GetItemChecked(i))
+                    bool isChecked = clbTitles.GetItemChecked(i);
+                    if (isChecked)
                         obtainedFlags |= (1u << (i + 1));
                     else
                         obtainedFlags &= ~(1u << (i + 1));
+                    // 实时刷新获得/未获得状态后缀（勾选=已获得）
+                    string name = TitleDatabase.GetTitleNameCn(idx, i + 1);
+                    string status = isChecked ? "" : LangText(" [未获得]", " [未取得]");
+                    clbTitles.Items[i] = string.Format("{0}: {1}{2}", i + 1, name, status);
                 }
                 _saveData.WriteU32(baseOff + SaveOffsets.CHAR_TITLE_FLAGS, obtainedFlags);
             }));
@@ -1453,7 +1657,9 @@ namespace TOAHEX
             for (int i = 0; i < SaveOffsets.BODY_ITEM_COUNT; i++)
             {
                 var item = ItemDatabase.GetById(i);
-                string name = item != null && !string.IsNullOrEmpty(item.Name) ? item.Name : $"(ID {i})";
+                // 隐藏只有ID没有具体名称的道具（ID 0/631 空名及 632-639 数据库未定义）
+                if (item == null || string.IsNullOrEmpty(item.Name)) continue;
+                string name = item.Name;
                 int qty = quantities[i];
                 _itemTable.Rows.Add(i, $"0x{i:X3}", name, qty);
             }
@@ -1481,26 +1687,39 @@ namespace TOAHEX
             ApplyItemFilter();
         }
 
+        private void txtItemSearch_TextChanged(object sender, EventArgs e)
+        {
+            ApplyItemFilter();
+        }
+
         private void ApplyItemFilter()
         {
             if (_itemTable == null) return;
             string category = cmbItemCategory.SelectedItem as string;
             if (category == null) return;
 
-            if (category == "全部")
+            // 类别筛选 + 名称/ID 搜索叠加（AND 组合）
+            var conds = new List<string>();
+
+            if (category != "全部")
             {
-                _itemTable.DefaultView.RowFilter = "";
-                return;
+                var ids = ItemDatabase.GetByCategory(category).Select(i => i.Id).ToList();
+                conds.Add(ids.Count == 0 ? "ID = -1" : $"ID IN ({string.Join(",", ids)})");
             }
 
-            var ids = ItemDatabase.GetByCategory(category).Select(i => i.Id).ToList();
-            if (ids.Count == 0)
+            string search = txtItemSearch != null ? txtItemSearch.Text.Trim() : "";
+            if (search.Length > 0)
             {
-                _itemTable.DefaultView.RowFilter = "ID = -1";
-                return;
+                string nameCol = LangText("名称", "名称");
+                string like = search.Replace("'", "''");
+                string cond = $"{nameCol} LIKE '%{like}%'";
+                int id;
+                if (int.TryParse(search, out id))
+                    cond += $" OR ID = {id}";
+                conds.Add($"({cond})");
             }
 
-            _itemTable.DefaultView.RowFilter = $"ID IN ({string.Join(",", ids)})";
+            _itemTable.DefaultView.RowFilter = string.Join(" AND ", conds);
         }
 
         private void dgvItems_CellValueChanged(object sender, DataGridViewCellEventArgs e)
@@ -1510,9 +1729,13 @@ namespace TOAHEX
             string qtyCol = LangText("数量", "数量");
             try
             {
-                DataRow row = _itemTable.Rows[e.RowIndex];
+                // 必须通过 DataBoundItem 取实际数据行：
+                // e.RowIndex 是筛选/排序后视图的行号，直接索引 _itemTable.Rows 会写错道具
+                DataRowView drv = dgvItems.Rows[e.RowIndex].DataBoundItem as DataRowView;
+                if (drv == null) return;
+                DataRow row = drv.Row;
                 int id = (int)row["ID"];
-                int qty = (int)row[qtyCol];
+                int qty = Convert.ToInt32(row[qtyCol]);
                 if (qty < 0) qty = 0;
                 if (qty > 99) qty = 99;
                 _saveData.SetItemQuantity(id, (byte)qty);
@@ -1541,6 +1764,107 @@ namespace TOAHEX
             {
                 e.Cancel = true;
                 MessageBox.Show(LangText("数量必须在0~99之间。", "数量は0～99の間で入力してください。"), LangText("输入错误", "入力エラー"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+
+        private void btnSaveBagState_Click(object sender, EventArgs e)
+        {
+            if (_saveData == null || _saveData.Type != SaveType.ToaXxx || _itemTable == null) return;
+
+            try
+            {
+                string qtyCol = LangText("数量", "数量");
+                int applied = 0;
+                foreach (DataRow row in _itemTable.Rows)
+                {
+                    int id = (int)row["ID"];
+                    int qty = Convert.ToInt32(row[qtyCol]);
+                    if (qty < 0) qty = 0;
+                    if (qty > 99) qty = 99;
+                    _saveData.SetItemQuantity(id, (byte)qty);
+                    applied++;
+                }
+                MessageBox.Show(string.Format(LangText("已保存当前背包状态（{0} 项道具）。", "現在のバッグ状態を保存しました（{0}アイテム）。"), applied), LangText("提示", "情報"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(string.Format(LangText("错误：{0}", "エラー：{0}"), ex.Message), LangText("错误", "エラー"), MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        /// <summary>
+        /// 滚轮悬停编辑：鼠标在背包表格"数量"列上滚动时直接增减数量。
+        /// 返回 true 表示已吞掉消息（阻止表格滚动），false 放行保持默认行为。
+        /// </summary>
+        private bool HandleItemWheel(ref Message m)
+        {
+            if (_loading || _saveData == null || _saveData.Type != SaveType.ToaXxx) return false;
+            if (dgvItems == null || !dgvItems.Visible || _itemTable == null) return false;
+
+            // 消息目标控件须属于主窗体（模态弹窗中的滚轮操作不拦截）
+            Control target = Control.FromHandle(m.HWnd);
+            if (target == null || target.FindForm() != this) return false;
+
+            string qtyCol = LangText("数量", "数量");
+            if (!dgvItems.Columns.Contains(qtyCol)) return false;
+
+            // WM_MOUSEWHEEL：lParam 为鼠标屏幕坐标（需转客户区再 HitTest），wParam 高16位为滚轮增量
+            long lp = m.LParam.ToInt64();
+            var screenPt = new Point((short)(lp & 0xFFFF), (short)((lp >> 16) & 0xFFFF));
+            if (!dgvItems.RectangleToScreen(dgvItems.ClientRectangle).Contains(screenPt)) return false;
+
+            Point clientPt = dgvItems.PointToClient(screenPt);
+            DataGridView.HitTestInfo hit = dgvItems.HitTest(clientPt.X, clientPt.Y);
+            if (hit.Type != DataGridViewHitTestType.Cell) return false;
+            if (hit.ColumnIndex != dgvItems.Columns[qtyCol].Index) return false;
+
+            long wp = m.WParam.ToInt64();
+            int delta = (short)((wp >> 16) & 0xFFFF);
+            if (delta == 0) return false;
+            // MK_CONTROL(0x0008)：按住 Ctrl 时步长 ×10
+            int step = ((wp & 0x0008) != 0 || (Control.ModifierKeys & Keys.Control) == Keys.Control) ? 10 : 1;
+
+            try
+            {
+                if (dgvItems.IsCurrentCellInEditMode)
+                {
+                    try { dgvItems.EndEdit(); } catch { }
+                }
+
+                // 必须通过 DataBoundItem 取实际数据行：
+                // hit.RowIndex 是筛选/排序后视图的行号，直接索引 _itemTable.Rows 会写错道具
+                DataRowView drv = dgvItems.Rows[hit.RowIndex].DataBoundItem as DataRowView;
+                if (drv == null) return false;
+                DataRow row = drv.Row;
+                int qty = Convert.ToInt32(row[qtyCol]);
+                qty += delta > 0 ? step : -step;
+                if (qty < 0) qty = 0;
+                if (qty > 99) qty = 99;
+                // 更新 DataTable 触发 dgvItems_CellValueChanged 写回链把数量写进存档字节
+                row[qtyCol] = qty;
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>全局滚轮消息过滤器：仅转发 WM_MOUSEWHEEL 给主窗体处理。</summary>
+        private sealed class ItemWheelFilter : IMessageFilter
+        {
+            private const int WM_MOUSEWHEEL = 0x020A;
+            private readonly MainForm _owner;
+
+            public ItemWheelFilter(MainForm owner)
+            {
+                _owner = owner;
+            }
+
+            public bool PreFilterMessage(ref Message m)
+            {
+                if (m.Msg != WM_MOUSEWHEEL) return false;
+                return _owner.HandleItemWheel(ref m);
             }
         }
 
@@ -1665,19 +1989,25 @@ namespace TOAHEX
             _loading = true;
             try
             {
-                try { numToasysDifficulty.Value = (decimal)_saveData.ReadFloat(SaveOffsets.TOASYS_DIFFICULTY); } catch { }
-                try { SetNumericSafe(numToasysGald, _saveData.ReadU32(SaveOffsets.TOASYS_GALD_COPY)); } catch { }
-                try { SetNumericSafe(numToasysPlaytime, _saveData.ReadU32(SaveOffsets.TOASYS_PLAYTIME_COPY)); } catch { }
-                try { SetNumericSafe(numToasysTotalTime, _saveData.ReadU32(SaveOffsets.TOASYS_TOTAL_TIME)); } catch { }
+                try { numToasysDifficulty.Value = (decimal)_saveData.ReadFloat(SaveOffsets.TOASYS_VERSION); } catch { }
+                // 偏移语义见 SaveOffsets.TOASYS_* 注释（2026-08-19 双存档+IDA 定案）
+                try { SetNumericSafe(numToasysGald, _saveData.ReadU32(SaveOffsets.TOASYS_GALD_MAX)); } catch { }
+                try { SetNumericSafe(numToasysPlaytime, _saveData.ReadU32(SaveOffsets.TOASYS_PLAYTIME_MAX)); } catch { }
+                try { SetNumericSafe(numToasysGaldSpent, _saveData.ReadU32(SaveOffsets.TOASYS_GALD_SPENT)); } catch { }
                 try { SetNumericSafe(numToasysSaveCount, _saveData.ReadU32(SaveOffsets.TOASYS_SAVE_COUNT)); } catch { }
-                try { SetNumericSafe(numToasysSysFlag1, _saveData.ReadU32(SaveOffsets.TOASYS_SYS_FLAG1)); } catch { }
-                try { SetNumericSafe(numToasysSysFlag2, _saveData.ReadU32(SaveOffsets.TOASYS_SYS_FLAG2)); } catch { }
-                try { SetNumericSafe(numToasysSysFlag3, _saveData.ReadU32(SaveOffsets.TOASYS_SYS_FLAG3)); } catch { }
                 try { SetNumericSafe(numToasysEncounter, _saveData.ReadU32(SaveOffsets.TOASYS_ENCOUNTER)); } catch { }
-                string[] charNames = { "卢克", "缇娅", "杰德", "阿妮丝", "凯", "娜塔莉亚", "阿修" };
-                for (int i = 0; i < 7; i++)
+                try { SetNumericSafe(numToasysClearCount, _saveData.ReadU32(SaveOffsets.TOASYS_CLEAR_COUNT)); } catch { }
+                chkSoundTest.Checked = _saveData.ReadU32(SaveOffsets.TOASYS_CLEAR_COUNT) != 0;
+                try { SetNumericSafe(numToasysEscape, _saveData.ReadU32(SaveOffsets.TOASYS_ESCAPE)); } catch { }
+                try { SetNumericSafe(numToasysMaxDamage, _saveData.ReadU32(SaveOffsets.TOASYS_MAX_DAMAGE)); } catch { }
+                try { SetNumericSafe(numToasysMaxCombo, _saveData.ReadU32(SaveOffsets.TOASYS_MAX_COMBO)); } catch { }
+                try { SetNumericSafe(numToasysDamageDealt, _saveData.ReadU32(SaveOffsets.TOASYS_DAMAGE_DEALT)); } catch { }
+                try { SetNumericSafe(numToasysDamageTaken, _saveData.ReadU32(SaveOffsets.TOASYS_DAMAGE_TAKEN)); } catch { }
+                try { SetNumericSafe(numToasysBattleTime, _saveData.ReadU32(SaveOffsets.TOASYS_BATTLE_TIME)); } catch { }
+                for (int i = 0; i < SaveOffsets.TOASYS_CHAR_USAGE_COUNT; i++)
                 {
                     try { SetNumericSafe(numToasysCharUsage[i], _saveData.ReadU32(SaveOffsets.TOASYS_CHAR_USAGE + i * 4)); } catch { }
+                    UpdateUsagePct(i);
                 }
             }
             finally
@@ -1686,16 +2016,74 @@ namespace TOAHEX
             }
         }
 
-        private void numToasysDifficulty_ValueChanged(object sender, EventArgs e) { if (_loading || _saveData == null) return; _saveData.WriteFloat(SaveOffsets.TOASYS_DIFFICULTY, (float)numToasysDifficulty.Value); }
-        private void numToasysGald_ValueChanged(object sender, EventArgs e) { if (_loading || _saveData == null) return; _saveData.WriteU32(SaveOffsets.TOASYS_GALD_COPY, (uint)numToasysGald.Value); }
-        private void numToasysPlaytime_ValueChanged(object sender, EventArgs e) { if (_loading || _saveData == null) return; _saveData.WriteU32(SaveOffsets.TOASYS_PLAYTIME_COPY, (uint)numToasysPlaytime.Value); }
-        private void numToasysTotalTime_ValueChanged(object sender, EventArgs e) { if (_loading || _saveData == null) return; _saveData.WriteU32(SaveOffsets.TOASYS_TOTAL_TIME, (uint)numToasysTotalTime.Value); }
+        // 0x04 是版本号 float 0.2（sub_37D584 固定写入），控件已设为只读，不再写回
+        private void numToasysDifficulty_ValueChanged(object sender, EventArgs e) { }
+        private void numToasysGald_ValueChanged(object sender, EventArgs e) { if (_loading || _saveData == null) return; _saveData.WriteU32(SaveOffsets.TOASYS_GALD_MAX, (uint)numToasysGald.Value); }
+        private void numToasysPlaytime_ValueChanged(object sender, EventArgs e) { if (_loading || _saveData == null) return; _saveData.WriteU32(SaveOffsets.TOASYS_PLAYTIME_MAX, (uint)numToasysPlaytime.Value); }
+        private void numToasysGaldSpent_ValueChanged(object sender, EventArgs e) { if (_loading || _saveData == null) return; _saveData.WriteU32(SaveOffsets.TOASYS_GALD_SPENT, (uint)numToasysGaldSpent.Value); }
         private void numToasysSaveCount_ValueChanged(object sender, EventArgs e) { if (_loading || _saveData == null) return; _saveData.WriteU32(SaveOffsets.TOASYS_SAVE_COUNT, (uint)numToasysSaveCount.Value); }
-        private void numToasysSysFlag1_ValueChanged(object sender, EventArgs e) { if (_loading || _saveData == null) return; _saveData.WriteU32(SaveOffsets.TOASYS_SYS_FLAG1, (uint)numToasysSysFlag1.Value); }
-        private void numToasysSysFlag2_ValueChanged(object sender, EventArgs e) { if (_loading || _saveData == null) return; _saveData.WriteU32(SaveOffsets.TOASYS_SYS_FLAG2, (uint)numToasysSysFlag2.Value); }
-        private void numToasysSysFlag3_ValueChanged(object sender, EventArgs e) { if (_loading || _saveData == null) return; _saveData.WriteU32(SaveOffsets.TOASYS_SYS_FLAG3, (uint)numToasysSysFlag3.Value); }
-        private void numToasysEncounter_ValueChanged(object sender, EventArgs e) { if (_loading || _saveData == null) return; _saveData.WriteU32(SaveOffsets.TOASYS_ENCOUNTER, (uint)numToasysEncounter.Value); }
-        private void numToasysCharUsage_ValueChanged(object sender, EventArgs e) { if (_loading || _saveData == null) return; int idx = (int)((NumericUpDown)sender).Tag; _saveData.WriteU32(SaveOffsets.TOASYS_CHAR_USAGE + idx * 4, (uint)((NumericUpDown)sender).Value); }
+        private void numToasysEncounter_ValueChanged(object sender, EventArgs e) { if (_loading || _saveData == null) return; _saveData.WriteU32(SaveOffsets.TOASYS_ENCOUNTER, (uint)numToasysEncounter.Value); for (int i = 0; i < SaveOffsets.TOASYS_CHAR_USAGE_COUNT; i++) UpdateUsagePct(i); }
+        private void numToasysClearCount_ValueChanged(object sender, EventArgs e)
+        {
+            if (_loading || _saveData == null) return;
+            _saveData.WriteU32(SaveOffsets.TOASYS_CLEAR_COUNT, (uint)numToasysClearCount.Value);
+            chkSoundTest.Checked = numToasysClearCount.Value > 0;
+        }
+        private void numToasysEscape_ValueChanged(object sender, EventArgs e) { if (_loading || _saveData == null) return; _saveData.WriteU32(SaveOffsets.TOASYS_ESCAPE, (uint)numToasysEscape.Value); }
+        private void numToasysMaxDamage_ValueChanged(object sender, EventArgs e) { if (_loading || _saveData == null) return; _saveData.WriteU32(SaveOffsets.TOASYS_MAX_DAMAGE, (uint)numToasysMaxDamage.Value); }
+        private void numToasysMaxCombo_ValueChanged(object sender, EventArgs e) { if (_loading || _saveData == null) return; _saveData.WriteU32(SaveOffsets.TOASYS_MAX_COMBO, (uint)numToasysMaxCombo.Value); }
+        private void numToasysDamageDealt_ValueChanged(object sender, EventArgs e) { if (_loading || _saveData == null) return; _saveData.WriteU32(SaveOffsets.TOASYS_DAMAGE_DEALT, (uint)numToasysDamageDealt.Value); }
+        private void numToasysDamageTaken_ValueChanged(object sender, EventArgs e) { if (_loading || _saveData == null) return; _saveData.WriteU32(SaveOffsets.TOASYS_DAMAGE_TAKEN, (uint)numToasysDamageTaken.Value); }
+        // 战斗总时间为游戏内统计汇总（0x5D0），只读展示不写回
+        private void numToasysCharUsage_ValueChanged(object sender, EventArgs e)
+        {
+            if (_loading || _saveData == null) return;
+            int idx = (int)((NumericUpDown)sender).Tag;
+            _saveData.WriteU32(SaveOffsets.TOASYS_CHAR_USAGE + idx * 4, (uint)((NumericUpDown)sender).Value);
+            UpdateUsagePct(idx);
+        }
+
+        // 使用率% = 计数 ÷ 遭遇数（0x1C）
+        private void UpdateUsagePct(int idx)
+        {
+            if (lblToasysUsagePct == null || lblToasysUsagePct.Length <= idx) return;
+            if (numToasysCharUsage == null || numToasysCharUsage.Length <= idx || numToasysEncounter == null) return;
+            uint enc = (uint)numToasysEncounter.Value;
+            if (enc == 0) { lblToasysUsagePct[idx].Text = "-"; return; }
+            double pct = (double)(uint)numToasysCharUsage[idx].Value * 100.0 / enc;
+            lblToasysUsagePct[idx].Text = pct.ToString("F1") + "%";
+        }
+
+        // 音效测试等通关后菜单 = 通关次数≠0（sub_333800/sub_333174 菜单构建）：
+        // 勾选时若原值为 0 则写 1（保留已有更高值）；取消勾选清 0
+        private void chkSoundTest_CheckedChanged(object sender, EventArgs e)
+        {
+            if (_loading || _saveData == null) return;
+            uint cur = _saveData.ReadU32(SaveOffsets.TOASYS_CLEAR_COUNT);
+            if (chkSoundTest.Checked)
+            {
+                if (cur == 0)
+                {
+                    _saveData.WriteU32(SaveOffsets.TOASYS_CLEAR_COUNT, 1);
+                    SetNumericSafe(numToasysClearCount, 1);
+                }
+            }
+            else if (cur != 0)
+            {
+                _saveData.WriteU32(SaveOffsets.TOASYS_CLEAR_COUNT, 0);
+                SetNumericSafe(numToasysClearCount, 0);
+            }
+        }
+
+        // 收集累计全开：0x6C4 起 128B 位图全 FF（byte_53CFE0，含音效曲目等累计解锁）
+        private void btnToasysUnlockAll_Click(object sender, EventArgs e)
+        {
+            if (_saveData == null || _saveData.Type != SaveType.Toasys) return;
+            byte[] fill = new byte[SaveOffsets.TOASYS_UNLOCK_BITMAP_SIZE];
+            for (int i = 0; i < fill.Length; i++) fill[i] = 0xFF;
+            _saveData.WriteBytes(SaveOffsets.TOASYS_UNLOCK_BITMAP, fill);
+            MessageBox.Show(LangText("收集累计已全开（保存后生效）。", "コレクション累計を全開放しました（保存後に有効）。"), LangText("提示", "情報"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
 
         #endregion
 

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 
@@ -27,11 +28,6 @@ namespace TOAHEX
             get => ReadFloat(SaveOffsets.HEADER_VERSION);
         }
 
-        public float Difficulty
-        {
-            get => ReadFloat(SaveOffsets.HEADER_DIFFICULTY);
-        }
-
         public uint Gald
         {
             get => ReadU32(SaveOffsets.BODY_GALD);
@@ -52,14 +48,18 @@ namespace TOAHEX
             }
         }
 
+        // 0xB080 当前持有 Grade（游戏 sub_2AA6D0：战斗 +=，上限 1e7）
         public float Grade
         {
             get => ReadFloat(SaveOffsets.BODY_GRADE);
-            set
-            {
-                WriteFloat(SaveOffsets.BODY_GRADE, value);
-                WriteFloat(SaveOffsets.BODY_GRADE_COPY, value);
-            }
+            set => WriteFloat(SaveOffsets.BODY_GRADE, value);
+        }
+
+        // 0xB088 累计获得 Grade（游戏 sub_2AA6D0：+= 战斗获得，上限 1e7；与持有是不同字段）
+        public float TotalGrade
+        {
+            get => ReadFloat(SaveOffsets.BODY_GRADE_TOTAL);
+            set => WriteFloat(SaveOffsets.BODY_GRADE_TOTAL, value);
         }
 
         public uint PartyCount
@@ -84,7 +84,70 @@ namespace TOAHEX
 
         public string LocationName
         {
-            get => ReadShiftJisString(SaveOffsets.HEAD_LOCATION_NAME, 32);
+            get
+            {
+                // 优先用汉化码表解码（Decode 内部处理 0x00 截断），码表未加载时回退 Shift-JIS
+                if (TblCodec.IsLoaded)
+                    return TblCodec.Decode(ReadBytes(SaveOffsets.HEAD_LOCATION_NAME, 32));
+                return ReadShiftJisString(SaveOffsets.HEAD_LOCATION_NAME, 32);
+            }
+        }
+
+        /// <summary>读取角色名（charIndex 1-7，CHAR_NAME=0x04，16 字节，0x00 截断），优先码表解码</summary>
+        public string ReadCharName(int charIndex)
+        {
+            int baseOff = GetCharBaseOffset(charIndex);
+            if (baseOff == 0) return string.Empty;
+            if (TblCodec.IsLoaded)
+                return TblCodec.Decode(ReadBytes(baseOff + SaveOffsets.CHAR_NAME, 16));
+            return ReadShiftJisString(baseOff + SaveOffsets.CHAR_NAME, 16);
+        }
+
+        /// <summary>
+        /// 写入角色名（16 字节字段，0x00 补齐；有效数据最多 15 字节）。
+        /// 失败时 error 说明原因（中文），返回 false；成功 error=null 返回 true。
+        /// </summary>
+        public bool WriteCharName(int charIndex, string name, out string error)
+        {
+            error = null;
+            if (_buffer == null || _saveType != SaveType.ToaXxx)
+            {
+                error = "仅支持 TOA_XXX 存档。";
+                return false;
+            }
+            if (string.IsNullOrEmpty(name))
+            {
+                error = "名称不能为空。";
+                return false;
+            }
+            int baseOff = GetCharBaseOffset(charIndex);
+            if (baseOff == 0)
+            {
+                error = "无效的角色索引。";
+                return false;
+            }
+            if (!TblCodec.IsLoaded)
+            {
+                error = "码表未加载（new_patched.tbl），无法编码角色名。";
+                return false;
+            }
+
+            byte[] encoded = TblCodec.Encode(name, out List<string> invalidChars);
+            if (invalidChars.Count > 0)
+            {
+                error = "以下字符无法用码表编码：" + string.Join("、", invalidChars);
+                return false;
+            }
+            if (encoded.Length > 15)
+            {
+                error = string.Format("名称编码后为 {0} 字节，超过 15 字节上限。", encoded.Length);
+                return false;
+            }
+
+            byte[] buf = new byte[16];
+            System.Buffer.BlockCopy(encoded, 0, buf, 0, encoded.Length);
+            WriteBytes(baseOff + SaveOffsets.CHAR_NAME, buf);
+            return true;
         }
 
         public byte[] ReadPartyOrder()
@@ -157,6 +220,9 @@ namespace TOAHEX
 
             if (_saveType == SaveType.ToaXxx)
             {
+                // 保存前按游戏逻辑(sub_37C948)从 body 角色块重建 HEAD 摘要区(0x94)，
+                // 保证存档槽预览与编辑后的数据同步
+                RebuildHeadSummary();
                 ChecksumHelper.FixToaChecksum(_buffer);
             }
             else if (_saveType == SaveType.Toasys)
@@ -500,6 +566,39 @@ namespace TOAHEX
             int[] offsets = { SaveOffsets.CHAR_CCORE_PATK_BONUS, SaveOffsets.CHAR_CCORE_PDEF_BONUS, SaveOffsets.CHAR_CCORE_FATK_BONUS, SaveOffsets.CHAR_CCORE_FDEF_BONUS, SaveOffsets.CHAR_CCORE_AGI_BONUS };
             if (statIndex < 0 || statIndex >= offsets.Length) return;
             WriteU16(baseOff + offsets[statIndex], value);
+        }
+
+        /// <summary>
+        /// 依据游戏保存逻辑（sub_37C948 头摘要循环）从 body 角色块重建 HEAD 摘要区（0x94 起，每条目 48 字节）。
+        /// 条目布局（相对 0x94+48n）：+0 角色ID、+4..+19 名字16B、+20 等级u8、+24 HP总值、
+        /// +28 MP总值、+32 当前HP、+36 当前TP、+40 OVL(u16 来源 0x324)。
+        /// </summary>
+        public int RebuildHeadSummary()
+        {
+            if (_buffer == null || _saveType != SaveType.ToaXxx) return 0;
+
+            // 以 body 队伍顺序(0x7C4, 1-based 角色 ID)为准重建
+            int rebuilt = 0;
+            for (int i = 0; i < 6 && i < SaveOffsets.BODY_PARTY_ORDER_COUNT; i++)
+            {
+                int roleId = ReadU8(SaveOffsets.BODY_PARTY_ORDER + i);
+                if (roleId < 1 || roleId > 7) continue;
+                int baseOff = GetCharBaseOffset(roleId);
+                if (baseOff == 0) continue;
+
+                int entry = SaveOffsets.CHAR_OVL_GAUGE_HEADER_BASE + rebuilt * SaveOffsets.CHAR_OVL_HEADER_ENTRY_SIZE;
+                WriteU32(entry + 0, (uint)roleId);
+                byte[] name = ReadBytes(baseOff + SaveOffsets.CHAR_NAME, 16);
+                WriteBytes(entry + 4, name);
+                WriteU8(entry + 20, (byte)(ReadU32(baseOff + SaveOffsets.CHAR_LEVEL) & 0xFF));
+                WriteU32(entry + 24, ReadU32(baseOff + 0x68));  // HP 总值
+                WriteU32(entry + 28, ReadU32(baseOff + 0x6C));  // MP 总值
+                WriteU32(entry + 32, ReadU32(baseOff + SaveOffsets.CHAR_HP));
+                WriteU32(entry + 36, ReadU32(baseOff + SaveOffsets.CHAR_TP));
+                WriteU32(entry + 40, ReadOvlGauge(roleId));
+                rebuilt++;
+            }
+            return rebuilt;
         }
     }
 }

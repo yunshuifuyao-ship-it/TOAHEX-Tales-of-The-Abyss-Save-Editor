@@ -265,22 +265,6 @@ namespace TOAHEX
 
             ey += 28;
 
-            var lblDiff = new Label();
-            lblDiff.Text = LangText("难度:", "難易度:");
-            lblDiff.Location = new Point(10, ey + 2);
-            lblDiff.Size = new Size(80, 18);
-            grpEdit.Controls.Add(lblDiff);
-
-            this.cmbDifficulty = new ComboBox();
-            this.cmbDifficulty.Location = new Point(95, ey);
-            this.cmbDifficulty.Size = new Size(200, 22);
-            this.cmbDifficulty.DropDownStyle = ComboBoxStyle.DropDownList;
-            this.cmbDifficulty.Items.AddRange(new object[] { "Normal", "Hard", "Simple", "Unknown" });
-            this.cmbDifficulty.SelectedIndexChanged += new System.EventHandler(this.cmbDifficulty_SelectedIndexChanged);
-            grpEdit.Controls.Add(this.cmbDifficulty);
-
-            ey += 28;
-
             var lblGrade = new Label();
             lblGrade.Text = LangText("Grade:", "Grade:");
             lblGrade.Location = new Point(10, ey + 2);
@@ -294,6 +278,38 @@ namespace TOAHEX
             this.numGrade.Maximum = 9999999;
             this.numGrade.ValueChanged += new System.EventHandler(this.numGrade_ValueChanged);
             grpEdit.Controls.Add(this.numGrade);
+
+            ey += 28;
+
+            var lblGradeTotal = new Label();
+            lblGradeTotal.Text = LangText("累计Grade(只读):", "累計Grade(読取専用):");
+            lblGradeTotal.Location = new Point(10, ey + 2);
+            lblGradeTotal.Size = new Size(84, 18);
+            grpEdit.Controls.Add(lblGradeTotal);
+
+            // 0xB088 累计获得 Grade（游戏 sub_2AA6D0 独立累计，与持有量语义不同，故只读展示）
+            this.numGradeTotal = new NumericUpDown();
+            this.numGradeTotal.Location = new Point(95, ey);
+            this.numGradeTotal.Size = new Size(200, 20);
+            this.numGradeTotal.Minimum = 0;
+            this.numGradeTotal.Maximum = 9999999;
+            this.numGradeTotal.ReadOnly = true;
+            grpEdit.Controls.Add(this.numGradeTotal);
+
+            // 难度（原队伍编排组移入此处，双写 0x7D0+0xABF3）
+            var lblDiffEdit = new Label();
+            lblDiffEdit.Text = LangText("难度:", "難易度:");
+            lblDiffEdit.Location = new Point(10, 192);
+            lblDiffEdit.Size = new Size(80, 18);
+            grpEdit.Controls.Add(lblDiffEdit);
+
+            this.cmbDifficulty = new ComboBox();
+            this.cmbDifficulty.Location = new Point(95, 190);
+            this.cmbDifficulty.Size = new Size(200, 22);
+            this.cmbDifficulty.DropDownStyle = ComboBoxStyle.DropDownList;
+            this.cmbDifficulty.Items.AddRange(new object[] { LangText("普通", "ノーマル"), LangText("困难", "ハード"), LangText("狂热", "マニア"), LangText("未知", "アンノウン") });
+            this.cmbDifficulty.SelectedIndexChanged += new System.EventHandler(this.cmbDifficulty_SelectedIndexChanged);
+            grpEdit.Controls.Add(this.cmbDifficulty);
 
             this.tabGlobal.Controls.Add(grpEdit);
 
@@ -316,7 +332,7 @@ namespace TOAHEX
             grpInfo.Controls.Add(this.lblVersion);
 
             var lblDiffTitle = new Label();
-            lblDiffTitle.Text = LangText("难度系数:", "難易度:");
+            lblDiffTitle.Text = LangText("难度:", "難易度:");
             lblDiffTitle.Location = new Point(10, 48);
             lblDiffTitle.Size = new Size(60, 18);
             grpInfo.Controls.Add(lblDiffTitle);
@@ -378,17 +394,19 @@ namespace TOAHEX
                 grpParty.Controls.Add(this.cmbPartySlot[i]);
             }
 
+            // 领队（0x7C3，单写即生效）：索引0=空、1-6=角色ID，不含阿修（阿修不可当领队）
+            // 位于原难度下拉位置；难度已移至"可编辑数据"组
             var lblLeader = new Label();
             lblLeader.Text = LangText("领队:", "リーダー:");
-            lblLeader.Location = new Point(210, 46);
-            lblLeader.Size = new Size(40, 18);
+            lblLeader.Location = new Point(200, 46);
+            lblLeader.Size = new Size(36, 18);
             grpParty.Controls.Add(lblLeader);
 
             this.cmbLeader = new ComboBox();
-            this.cmbLeader.Location = new Point(252, 44);
-            this.cmbLeader.Size = new Size(110, 22);
+            this.cmbLeader.Location = new Point(240, 44);
+            this.cmbLeader.Size = new Size(126, 22);
             this.cmbLeader.DropDownStyle = ComboBoxStyle.DropDownList;
-            this.cmbLeader.Items.AddRange(new object[] { "卢克", "缇娅", "杰德", "阿妮丝", "凯", "娜塔莉亚", "阿修" });
+            this.cmbLeader.Items.AddRange(new object[] { LangText("(空)", "(空)"), "卢克", "缇娅", "杰德", "阿妮丝", "凯", "娜塔莉亚", "阿修" });
             this.cmbLeader.SelectedIndexChanged += new System.EventHandler(this.cmbLeader_SelectedIndexChanged);
             grpParty.Controls.Add(this.cmbLeader);
 
@@ -419,7 +437,7 @@ namespace TOAHEX
             var grpTools = new GroupBox();
             grpTools.Text = LangText("工具", "ツール");
             grpTools.Location = new Point(365, 238);
-            grpTools.Size = new Size(380, 130);
+            grpTools.Size = new Size(380, 160);
             grpTools.Anchor = AnchorStyles.Top | AnchorStyles.Left;
 
             this.btnJournalAll = new Button();
@@ -451,7 +469,7 @@ namespace TOAHEX
             grpTools.Controls.Add(this.btnAllTitles);
 
             this.btnAllADSkills = new Button();
-            this.btnAllADSkills.Text = LangText("全AD技能", "全ADスキル");
+            this.btnAllADSkills.Text = LangText("全附加技能", "全追加スキル");
             this.btnAllADSkills.Location = new Point(248, 50);
             this.btnAllADSkills.Size = new Size(110, 24);
             this.btnAllADSkills.Click += new EventHandler(this.btnAllADSkills_Click);
@@ -470,6 +488,21 @@ namespace TOAHEX
             this.btnAllCookingMax.Size = new Size(170, 24);
             this.btnAllCookingMax.Click += new EventHandler(this.btnAllCookingMax_Click);
             grpTools.Controls.Add(this.btnAllCookingMax);
+
+            this.btnAllItemsMax = new Button();
+            this.btnAllItemsMax.Text = LangText("所有道具全满", "全アイテム最大");
+            this.btnAllItemsMax.Location = new Point(12, 110);
+            this.btnAllItemsMax.Size = new Size(170, 24);
+            this.btnAllItemsMax.Click += new EventHandler(this.btnAllItemsMax_Click);
+            grpTools.Controls.Add(this.btnAllItemsMax);
+
+            // 原"编辑"菜单项移入工具组
+            this.btnCharName = new Button();
+            this.btnCharName.Text = LangText("更改角色名...", "キャラ名変更...");
+            this.btnCharName.Location = new Point(192, 110);
+            this.btnCharName.Size = new Size(170, 24);
+            this.btnCharName.Click += new EventHandler(this.menuEditCharName_Click);
+            grpTools.Controls.Add(this.btnCharName);
 
             this.tabGlobal.Controls.Add(grpTools);
 
@@ -503,15 +536,13 @@ namespace TOAHEX
             this.charInnerTab.Size = new Size(760, 425);
             this.charInnerTab.TabIndex = 0;
 
-            this.subTabStats = new TabPage(LangText("基础属性", "基本ステータス"));
-            this.tabSubCombat = new TabPage(LangText("战斗属性", "戦闘属性"));
+            this.subTabStats = new TabPage(LangText("角色属性", "キャラステータス"));
             this.subTabEquip = new TabPage(LangText("装备", "装備"));
             this.subTabArtes = new TabPage(LangText("术技", "アーツ"));
-            this.subTabADSkill = new TabPage(LangText("AD技能", "ADスキル"));
+            this.subTabADSkill = new TabPage(LangText("附加技能", "追加スキル"));
             this.subTabTitle = new TabPage(LangText("称号", "称号"));
 
             this.charInnerTab.Controls.Add(this.subTabStats);
-            this.charInnerTab.Controls.Add(this.tabSubCombat);
             this.charInnerTab.Controls.Add(this.subTabEquip);
             this.charInnerTab.Controls.Add(this.subTabArtes);
             this.charInnerTab.Controls.Add(this.subTabADSkill);
@@ -520,7 +551,6 @@ namespace TOAHEX
             this.tabCharacter.Controls.Add(this.charInnerTab);
 
             InitSubTabStats();
-            InitSubTabCombat();
             InitSubTabEquip();
             InitSubTabArtes();
             InitSubTabADSkill();
@@ -533,42 +563,99 @@ namespace TOAHEX
             grpBasic.Text = LangText("基础属性", "基本ステータス");
             grpBasic.Location = new Point(8, 8);
             grpBasic.Size = new Size(370, 400);
+            this._grpStats = grpBasic;
             this.subTabStats.Controls.Add(grpBasic);
 
-            int y = 24;
-            this.numLevel = AddNumericRow(grpBasic, LangText("等级:", "レベル:"), 12, ref y, 1, 200);
+            // 基础/战斗两个面板叠放，切换按钮互斥显示（右侧立绘与成长组不变）
+            this.pnlStatBasic = new Panel();
+            pnlStatBasic.Location = new Point(2, 20);
+            pnlStatBasic.Size = new Size(366, 342);
+            grpBasic.Controls.Add(pnlStatBasic);
+
+            this.pnlStatCombat = new Panel();
+            pnlStatCombat.Location = new Point(2, 20);
+            pnlStatCombat.Size = new Size(366, 342);
+            pnlStatCombat.Visible = false;
+            grpBasic.Controls.Add(pnlStatCombat);
+
+            this.btnStatToggle = new Button();
+            btnStatToggle.Text = LangText("显示战斗属性 ▸", "戦闘ステータスへ ▸");
+            btnStatToggle.AutoSize = true;
+            btnStatToggle.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            btnStatToggle.Padding = new Padding(8, 2, 8, 2);
+            btnStatToggle.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            btnStatToggle.Location = new Point(250, 368);
+            btnStatToggle.Click += new System.EventHandler(this.btnStatToggle_Click);
+            grpBasic.Controls.Add(this.btnStatToggle);
+
+            int y = 6;
+            this.numLevel = AddNumericRow(pnlStatBasic, LangText("等级:", "レベル:"), 12, ref y, 1, 200);
             this.numLevel.ValueChanged += new System.EventHandler(this.numLevel_ValueChanged);
-            this.numExp = AddNumericRow(grpBasic, LangText("经验值:", "経験値:"), 12, ref y, 0, 4294967295);
+            this.numExp = AddNumericRow(pnlStatBasic, LangText("经验值:", "経験値:"), 12, ref y, 0, 4294967295);
             this.numExp.ValueChanged += new System.EventHandler(this.numExp_ValueChanged);
-            this.numHP = AddNumericRow(grpBasic, LangText("当前HP:", "現在HP:"), 12, ref y, 0, 99999);
+            this.numHP = AddNumericRow(pnlStatBasic, LangText("当前HP:", "現在HP:"), 12, ref y, 0, 99999);
             this.numHP.ValueChanged += new System.EventHandler(this.numHP_ValueChanged);
-            this.numTP = AddNumericRow(grpBasic, LangText("当前TP:", "現在TP:"), 12, ref y, 0, 9999);
+            this.numTP = AddNumericRow(pnlStatBasic, LangText("当前TP:", "現在TP:"), 12, ref y, 0, 9999);
             this.numTP.ValueChanged += new System.EventHandler(this.numTP_ValueChanged);
-            this.numMaxHP = AddNumericRow(grpBasic, LangText("最大HP:", "最大HP:"), 12, ref y, 1, 99999);
+            this.numMaxHP = AddNumericRow(pnlStatBasic, LangText("最大HP:", "最大HP:"), 12, ref y, 1, 99999);
             this.numMaxHP.ValueChanged += new System.EventHandler(this.numMaxHP_ValueChanged);
-            this.numMaxTP = AddNumericRow(grpBasic, LangText("最大TP:", "最大TP:"), 12, ref y, 1, 9999);
+            this.numMaxTP = AddNumericRow(pnlStatBasic, LangText("最大TP:", "最大TP:"), 12, ref y, 1, 9999);
             this.numMaxTP.ValueChanged += new System.EventHandler(this.numMaxTP_ValueChanged);
-            this.numGrowthPoints = AddNumericRow(grpBasic, LangText("成长点数:", "成長ポイント:"), 12, ref y, 0, 65535);
+            this.numGrowthPoints = AddNumericRow(pnlStatBasic, LangText("成长点数:", "成長ポイント:"), 12, ref y, 0, 65535);
             this.numGrowthPoints.ValueChanged += new System.EventHandler(this.numGrowthPoints_ValueChanged);
 
             var lblTitleLabel = new Label();
             lblTitleLabel.Text = LangText("当前称号:", "現在称号:");
             lblTitleLabel.Location = new Point(12, y + 2);
             lblTitleLabel.Size = new Size(80, 20);
-            grpBasic.Controls.Add(lblTitleLabel);
+            pnlStatBasic.Controls.Add(lblTitleLabel);
 
             this.lblTitle = new Label();
             this.lblTitle.Text = LangText("(无)", "(なし)");
             this.lblTitle.Location = new Point(96, y + 2);
             this.lblTitle.Size = new Size(140, 20);
-            grpBasic.Controls.Add(this.lblTitle);
+            pnlStatBasic.Controls.Add(this.lblTitle);
 
             this.btnTitleChange = new Button();
             this.btnTitleChange.Text = LangText("更改", "変更");
             this.btnTitleChange.Location = new Point(244, y);
             this.btnTitleChange.Size = new Size(60, 24);
             this.btnTitleChange.Click += new System.EventHandler(this.btnTitleChange_Click);
-            grpBasic.Controls.Add(this.btnTitleChange);
+            pnlStatBasic.Controls.Add(this.btnTitleChange);
+
+            // 战斗属性面板（原独立子页签并入此处，随按钮切换）
+            int cy = 6;
+            this.numBasePATK = AddNumericRow(pnlStatCombat, LangText("物攻(P.ATK):", "物攻(P.ATK):"), 12, ref cy, 0, 99999);
+            this.numBasePATK.ValueChanged += new System.EventHandler(this.numBasePATK_ValueChanged);
+            this.numBasePDEF = AddNumericRow(pnlStatCombat, LangText("物防(P.DEF):", "物防(P.DEF):"), 12, ref cy, 0, 99999);
+            this.numBasePDEF.ValueChanged += new System.EventHandler(this.numBasePDEF_ValueChanged);
+            this.numBaseFATK = AddNumericRow(pnlStatCombat, LangText("譜攻(F.ATK):", "譜攻(F.ATK):"), 12, ref cy, 0, 99999);
+            this.numBaseFATK.ValueChanged += new System.EventHandler(this.numBaseFATK_ValueChanged);
+            this.numBaseFDEF = AddNumericRow(pnlStatCombat, LangText("譜防(F.DEF):", "譜防(F.DEF):"), 12, ref cy, 0, 99999);
+            this.numBaseFDEF.ValueChanged += new System.EventHandler(this.numBaseFDEF_ValueChanged);
+            this.numBaseAGI = AddNumericRow(pnlStatCombat, LangText("敏捷(AGI):", "敏捷(AGI):"), 12, ref cy, 0, 99999);
+            this.numBaseAGI.ValueChanged += new System.EventHandler(this.numBaseAGI_ValueChanged);
+            this.numBaseLUCK = AddNumericRow(pnlStatCombat, LangText("幸运(LUCK):", "運(LUCK):"), 12, ref cy, 0, 9999);
+            this.numBaseLUCK.ValueChanged += new System.EventHandler(this.numBaseLUCK_ValueChanged);
+            this.numOvlGauge = AddNumericRow(pnlStatCombat, LangText("OVL", "OVLゲージ:"), 12, ref cy, 0, 1000);
+            this.numOvlGauge.ValueChanged += new System.EventHandler(this.numOvlGauge_ValueChanged);
+
+            // C-Core 加成已按用户要求隐藏：控件保留在无父容器中（不显示），
+            // 仅维持 RefreshCharFields 装载/幸运联动逻辑不抛空引用
+            var grpCCoreHidden = new GroupBox();
+            int ccy = 20;
+            this.numCCorePATK = AddNumericRow(grpCCoreHidden, LangText("C-Core物攻:", "C-Core物攻:"), 12, ref ccy, 0, 9999);
+            this.numCCorePATK.ValueChanged += new System.EventHandler(this.numCCorePATK_ValueChanged);
+            this.numCCorePDEF = AddNumericRow(grpCCoreHidden, LangText("C-Core物防:", "C-Core物防:"), 12, ref ccy, 0, 9999);
+            this.numCCorePDEF.ValueChanged += new System.EventHandler(this.numCCorePDEF_ValueChanged);
+            this.numCCoreFATK = AddNumericRow(grpCCoreHidden, LangText("C-Core谱攻:", "C-Core譜攻:"), 12, ref ccy, 0, 9999);
+            this.numCCoreFATK.ValueChanged += new System.EventHandler(this.numCCoreFATK_ValueChanged);
+            this.numCCoreFDEF = AddNumericRow(grpCCoreHidden, LangText("C-Core谱防:", "C-Core譜防:"), 12, ref ccy, 0, 9999);
+            this.numCCoreFDEF.ValueChanged += new System.EventHandler(this.numCCoreFDEF_ValueChanged);
+            this.numCCoreAGI = AddNumericRow(grpCCoreHidden, LangText("C-Core敏捷:", "C-Core敏捷:"), 12, ref ccy, 0, 9999);
+            this.numCCoreAGI.ValueChanged += new System.EventHandler(this.numCCoreAGI_ValueChanged);
+            this.numCCoreLUK = AddNumericRow(grpCCoreHidden, LangText("C-Core幸运:", "C-Core運:"), 12, ref ccy, 0, 9999);
+            this.numCCoreLUK.ValueChanged += new System.EventHandler(this.numCCoreLUK_ValueChanged);
 
             this.picCharPortrait = new PictureBox();
             this.picCharPortrait.Location = new Point(540, 8);
@@ -576,137 +663,81 @@ namespace TOAHEX
             this.picCharPortrait.SizeMode = PictureBoxSizeMode.Zoom;
             this.picCharPortrait.BorderStyle = BorderStyle.FixedSingle;
             this.subTabStats.Controls.Add(this.picCharPortrait);
-        }
 
-        private void InitSubTabCombat()
-        {
-            var grpCombat = new GroupBox();
-            grpCombat.Text = LangText("战斗属性", "戦闘ステータス");
-            grpCombat.Location = new Point(8, 8);
-            grpCombat.Size = new Size(370, 260);
-            this.tabSubCombat.Controls.Add(grpCombat);
+            // 等级联动成长：调整等级时按每级增量自动增减基础属性（近似值；游戏读档时会重算衍生属性）
+            var grpGrowth = new GroupBox();
+            grpGrowth.Text = LangText("等级联动成长", "レベル連動成長");
+            grpGrowth.Location = new Point(386, 8);
+            grpGrowth.Size = new Size(148, 404);
+            this.subTabStats.Controls.Add(grpGrowth);
 
-            int cy = 20;
-            this.numBasePATK = AddNumericRow(grpCombat, LangText("物攻(P.ATK):", "物攻(P.ATK):"), 12, ref cy, 0, 99999);
-            this.numBasePATK.ValueChanged += new System.EventHandler(this.numBasePATK_ValueChanged);
-            this.numBasePDEF = AddNumericRow(grpCombat, LangText("物防(P.DEF):", "物防(P.DEF):"), 12, ref cy, 0, 99999);
-            this.numBasePDEF.ValueChanged += new System.EventHandler(this.numBasePDEF_ValueChanged);
-            this.numBaseFATK = AddNumericRow(grpCombat, LangText("譜攻(F.ATK):", "譜攻(F.ATK):"), 12, ref cy, 0, 99999);
-            this.numBaseFATK.ValueChanged += new System.EventHandler(this.numBaseFATK_ValueChanged);
-            this.numBaseFDEF = AddNumericRow(grpCombat, LangText("譜防(F.DEF):", "譜防(F.DEF):"), 12, ref cy, 0, 99999);
-            this.numBaseFDEF.ValueChanged += new System.EventHandler(this.numBaseFDEF_ValueChanged);
-            this.numBaseAGI = AddNumericRow(grpCombat, LangText("敏捷(AGI):", "敏捷(AGI):"), 12, ref cy, 0, 99999);
-            this.numBaseAGI.ValueChanged += new System.EventHandler(this.numBaseAGI_ValueChanged);
-            this.numBaseLUCK = AddNumericRow(grpCombat, LangText("幸运(LUCK):", "運(LUCK):"), 12, ref cy, 0, 9999);
-            this.numBaseLUCK.ValueChanged += new System.EventHandler(this.numBaseLUCK_ValueChanged);
-            this.numOvlGauge = AddNumericRow(grpCombat, LangText("OVL", "OVLゲージ:"), 12, ref cy, 0, 1000);
-            this.numOvlGauge.ValueChanged += new System.EventHandler(this.numOvlGauge_ValueChanged);
+            this.chkLevelGrowth = new CheckBox();
+            this.chkLevelGrowth.Text = LangText("启用(每级增量)", "有効(毎レベル)");
+            this.chkLevelGrowth.Location = new Point(10, 20);
+            this.chkLevelGrowth.Size = new Size(130, 20);
+            grpGrowth.Controls.Add(this.chkLevelGrowth);
 
-            var grpCCore = new GroupBox();
-            grpCCore.Text = LangText("C-Core加成", "C-Coreボーナス");
-            grpCCore.Location = new Point(385, 8);
-            grpCCore.Size = new Size(370, 200);
-            this.tabSubCombat.Controls.Add(grpCCore);
+            int gy = 44;
+            this.numGrowHP = AddNumericRow(grpGrowth, LangText("HP+", "HP+"), 10, ref gy, 0, 9999, 46);
+            this.numGrowTP = AddNumericRow(grpGrowth, LangText("TP+", "TP+"), 10, ref gy, 0, 999, 46);
+            this.numGrowPATK = AddNumericRow(grpGrowth, LangText("物攻+", "物攻+"), 10, ref gy, 0, 999, 46);
+            this.numGrowPDEF = AddNumericRow(grpGrowth, LangText("物防+", "物防+"), 10, ref gy, 0, 999, 46);
+            this.numGrowFATK = AddNumericRow(grpGrowth, LangText("谱攻+", "譜攻+"), 10, ref gy, 0, 999, 46);
+            this.numGrowFDEF = AddNumericRow(grpGrowth, LangText("谱防+", "譜防+"), 10, ref gy, 0, 999, 46);
+            this.numGrowAGI = AddNumericRow(grpGrowth, LangText("敏捷+", "敏捷+"), 10, ref gy, 0, 999, 46);
+            this.numGrowLUK = AddNumericRow(grpGrowth, LangText("幸运+", "運+"), 10, ref gy, 0, 99, 46);
+            this.numGrowHP.Value = 45; this.numGrowTP.Value = 6;
+            this.numGrowPATK.Value = 4; this.numGrowPDEF.Value = 3;
+            this.numGrowFATK.Value = 4; this.numGrowFDEF.Value = 3;
+            this.numGrowAGI.Value = 1; this.numGrowLUK.Value = 0;
 
-            int ccy = 20;
-            this.numCCorePATK = AddNumericRow(grpCCore, LangText("C-Core物攻:", "C-Core物攻:"), 12, ref ccy, 0, 9999);
-            this.numCCorePATK.ValueChanged += new System.EventHandler(this.numCCorePATK_ValueChanged);
-            this.numCCorePDEF = AddNumericRow(grpCCore, LangText("C-Core物防:", "C-Core物防:"), 12, ref ccy, 0, 9999);
-            this.numCCorePDEF.ValueChanged += new System.EventHandler(this.numCCorePDEF_ValueChanged);
-            this.numCCoreFATK = AddNumericRow(grpCCore, LangText("C-Core谱攻:", "C-Core譜攻:"), 12, ref ccy, 0, 9999);
-            this.numCCoreFATK.ValueChanged += new System.EventHandler(this.numCCoreFATK_ValueChanged);
-            this.numCCoreFDEF = AddNumericRow(grpCCore, LangText("C-Core谱防:", "C-Core譜防:"), 12, ref ccy, 0, 9999);
-            this.numCCoreFDEF.ValueChanged += new System.EventHandler(this.numCCoreFDEF_ValueChanged);
-            this.numCCoreAGI = AddNumericRow(grpCCore, LangText("C-Core敏捷:", "C-Core敏捷:"), 12, ref ccy, 0, 9999);
-            this.numCCoreAGI.ValueChanged += new System.EventHandler(this.numCCoreAGI_ValueChanged);
-            this.numCCoreLUK = AddNumericRow(grpCCore, LangText("C-Core幸运:", "C-Core運:"), 12, ref ccy, 0, 9999);
-            this.numCCoreLUK.ValueChanged += new System.EventHandler(this.numCCoreLUK_ValueChanged);
-
+            var lblGrowthHint = new Label();
+            lblGrowthHint.Text = LangText("调整等级时按增量自动增减基础属性。增量为近似值；游戏读档时会按等级重算衍生属性(sub_3E1038)。", "レベル変更時に基礎ステータスを自動増減。近似値。ゲーム読込時に衍生値は再計算されます。");
+            lblGrowthHint.Location = new Point(10, gy + 2);
+            lblGrowthHint.Size = new Size(130, 140);
+            grpGrowth.Controls.Add(lblGrowthHint);
         }
 
         private void InitSubTabEquip()
         {
+            // 装备全开按钮（右上）
             this.btnGetAllEquip = new Button();
             this.btnGetAllEquip.Text = LangText("装备全开", "全装備獲得");
-            this.btnGetAllEquip.Location = new Point(380, 16);
+            this.btnGetAllEquip.Location = new Point(640, 10);
             this.btnGetAllEquip.Size = new Size(110, 24);
             this.btnGetAllEquip.Click += new System.EventHandler(this.btnGetAllEquip_Click);
             this.subTabEquip.Controls.Add(this.btnGetAllEquip);
 
-            int ey = 48;
+            // 术技页同款紧凑布局：5 行"槽位: 当前装备名" + 更改按钮（行距 32）；
+            // 五行从 y=46 开始，顶部整行留给"装备全开"按钮（避免与首行"更改"重叠）
+            this.lblEquip = new Label[5];
+            this.btnEquipChange = new Button[5];
+            string[] slotNames =
+            {
+                LangText("武器", "武器"),
+                LangText("防具", "防具"),
+                LangText("饰品1", "アクセ1"),
+                LangText("饰品2", "アクセ2"),
+                LangText("响律符", "響律符"),
+            };
+            for (int i = 0; i < 5; i++)
+            {
+                int y = 46 + i * 32;
 
-            var lblWeapon = new Label();
-            lblWeapon.Text = LangText("武器:", "武器:");
-            lblWeapon.Location = new Point(12, ey + 4);
-            lblWeapon.Size = new Size(60, 20);
-            this.subTabEquip.Controls.Add(lblWeapon);
+                this.lblEquip[i] = new Label();
+                this.lblEquip[i].Text = slotNames[i] + ": -";
+                this.lblEquip[i].Location = new Point(12, y + 2);
+                this.lblEquip[i].Size = new Size(580, 20);
+                this.subTabEquip.Controls.Add(this.lblEquip[i]);
 
-            this.cmbWeapon = new ComboBox();
-            this.cmbWeapon.Location = new Point(80, ey);
-            this.cmbWeapon.Size = new Size(280, 22);
-            this.cmbWeapon.DropDownStyle = ComboBoxStyle.DropDownList;
-            this.cmbWeapon.SelectedIndexChanged += new System.EventHandler(this.cmbWeapon_SelectedIndexChanged);
-            this.subTabEquip.Controls.Add(this.cmbWeapon);
-
-            ey += 32;
-
-            var lblArmor = new Label();
-            lblArmor.Text = LangText("防具:", "防具:");
-            lblArmor.Location = new Point(12, ey + 4);
-            lblArmor.Size = new Size(60, 20);
-            this.subTabEquip.Controls.Add(lblArmor);
-
-            this.cmbArmor = new ComboBox();
-            this.cmbArmor.Location = new Point(80, ey);
-            this.cmbArmor.Size = new Size(280, 22);
-            this.cmbArmor.DropDownStyle = ComboBoxStyle.DropDownList;
-            this.cmbArmor.SelectedIndexChanged += new System.EventHandler(this.cmbArmor_SelectedIndexChanged);
-            this.subTabEquip.Controls.Add(this.cmbArmor);
-
-            ey += 32;
-
-            var lblAcc1 = new Label();
-            lblAcc1.Text = LangText("饰品1:", "アクセ1:");
-            lblAcc1.Location = new Point(12, ey + 4);
-            lblAcc1.Size = new Size(60, 20);
-            this.subTabEquip.Controls.Add(lblAcc1);
-
-            this.cmbAcc1 = new ComboBox();
-            this.cmbAcc1.Location = new Point(80, ey);
-            this.cmbAcc1.Size = new Size(280, 22);
-            this.cmbAcc1.DropDownStyle = ComboBoxStyle.DropDownList;
-            this.cmbAcc1.SelectedIndexChanged += new System.EventHandler(this.cmbAcc1_SelectedIndexChanged);
-            this.subTabEquip.Controls.Add(this.cmbAcc1);
-
-            ey += 32;
-
-            var lblAcc2 = new Label();
-            lblAcc2.Text = LangText("饰品2:", "アクセ2:");
-            lblAcc2.Location = new Point(12, ey + 4);
-            lblAcc2.Size = new Size(60, 20);
-            this.subTabEquip.Controls.Add(lblAcc2);
-
-            this.cmbAcc2 = new ComboBox();
-            this.cmbAcc2.Location = new Point(80, ey);
-            this.cmbAcc2.Size = new Size(280, 22);
-            this.cmbAcc2.DropDownStyle = ComboBoxStyle.DropDownList;
-            this.cmbAcc2.SelectedIndexChanged += new System.EventHandler(this.cmbAcc2_SelectedIndexChanged);
-            this.subTabEquip.Controls.Add(this.cmbAcc2);
-
-            ey += 32;
-
-            var lblKyouritsufu = new Label();
-            lblKyouritsufu.Text = LangText("响律符:", "響律符:");
-            lblKyouritsufu.Location = new Point(12, ey + 4);
-            lblKyouritsufu.Size = new Size(60, 20);
-            this.subTabEquip.Controls.Add(lblKyouritsufu);
-
-            this.cmbKyouritsufu = new ComboBox();
-            this.cmbKyouritsufu.Location = new Point(80, ey);
-            this.cmbKyouritsufu.Size = new Size(280, 22);
-            this.cmbKyouritsufu.DropDownStyle = ComboBoxStyle.DropDownList;
-            this.cmbKyouritsufu.SelectedIndexChanged += new System.EventHandler(this.cmbKyouritsufu_SelectedIndexChanged);
-            this.subTabEquip.Controls.Add(this.cmbKyouritsufu);
+                this.btnEquipChange[i] = new Button();
+                this.btnEquipChange[i].Text = LangText("更改", "変更");
+                this.btnEquipChange[i].Location = new Point(620, y);
+                this.btnEquipChange[i].Size = new Size(60, 22);
+                this.btnEquipChange[i].Tag = i;
+                this.btnEquipChange[i].Click += new System.EventHandler(this.btnEquipChange_Click);
+                this.subTabEquip.Controls.Add(this.btnEquipChange[i]);
+            }
         }
 
         private void InitSubTabArtes()
@@ -838,6 +869,7 @@ namespace TOAHEX
             this.clbTitles = new CheckedListBox();
             this.clbTitles.Location = new Point(6, 36);
             this.clbTitles.Size = new Size(740, 330);
+            this.clbTitles.CheckOnClick = true; // 单击行即勾选/取消，无需先选中再点击
             this.clbTitles.ItemCheck += new ItemCheckEventHandler(this.clbTitles_ItemCheck);
             this.subTabTitle.Controls.Add(this.clbTitles);
         }
@@ -1043,87 +1075,127 @@ namespace TOAHEX
             this.tabSystem.Text = LangText("系统数据", "システムデータ");
             this.tabSystem.UseVisualStyleBackColor = true;
 
-            var grpSysData = new GroupBox();
-            grpSysData.Text = LangText("系统数据编辑", "システムデータ編集");
-            grpSysData.Location = new Point(12, 12);
-            grpSysData.Size = new Size(730, 470);
-            grpSysData.Anchor = AnchorStyles.Top | AnchorStyles.Left;
+            // 基础记录组（左上）
+            var grpBase = new GroupBox();
+            grpBase.Text = LangText("基础记录", "基本記録");
+            grpBase.Location = new Point(12, 12);
+            grpBase.Size = new Size(366, 204);
+            this.tabSystem.Controls.Add(grpBase);
 
             int sy = 22;
-
-            var lblDifficulty = new Label();
-            lblDifficulty.Text = LangText("难度模式:", "難易度モード:");
-            lblDifficulty.Location = new Point(12, sy + 2);
-            lblDifficulty.Size = new Size(140, 20);
-            grpSysData.Controls.Add(lblDifficulty);
+            var lblVer = new Label();
+            lblVer.Text = LangText("存档版本(只读):", "セーブバージョン(読取専用):");
+            lblVer.Location = new Point(12, sy + 2);
+            lblVer.Size = new Size(140, 20);
+            grpBase.Controls.Add(lblVer);
 
             this.numToasysDifficulty = new NumericUpDown();
             this.numToasysDifficulty.Location = new Point(160, sy);
-            this.numToasysDifficulty.Size = new Size(200, 22);
+            this.numToasysDifficulty.Size = new Size(194, 22);
             this.numToasysDifficulty.DecimalPlaces = 6;
             this.numToasysDifficulty.Minimum = 0;
             this.numToasysDifficulty.Maximum = 1;
             this.numToasysDifficulty.Increment = 0.1m;
+            this.numToasysDifficulty.ReadOnly = true;   // 0x04 为版本号(float 0.2)，只读展示
             this.numToasysDifficulty.ValueChanged += new System.EventHandler(this.numToasysDifficulty_ValueChanged);
-            grpSysData.Controls.Add(this.numToasysDifficulty);
+            grpBase.Controls.Add(this.numToasysDifficulty);
 
             sy += 28;
-
-            this.numToasysGald = AddNumericRow(grpSysData, LangText("金币/Gald:", "ガルド/Gald:"), 12, ref sy, 0, 99999999);
+            this.numToasysGald = AddNumericRow(grpBase, LangText("最大持有Gald:", "最大所持ガルド:"), 12, ref sy, 0, 99999999);
             this.numToasysGald.ValueChanged += new System.EventHandler(this.numToasysGald_ValueChanged);
-
-            this.numToasysPlaytime = AddNumericRow(grpSysData, LangText("游戏时间/Playtime:", "ゲーム時間/Playtime:"), 12, ref sy, 0, 215999999);
+            this.numToasysPlaytime = AddNumericRow(grpBase, LangText("最长游戏时间(帧):", "最長ゲーム時間(フレーム):"), 12, ref sy, 0, 4294967295);
             this.numToasysPlaytime.ValueChanged += new System.EventHandler(this.numToasysPlaytime_ValueChanged);
-
-            this.numToasysTotalTime = AddNumericRow(grpSysData, LangText("总游戏时间/Total Time:", "総ゲーム時間/Total Time:"), 12, ref sy, 0, 4294967295);
-            this.numToasysTotalTime.ValueChanged += new System.EventHandler(this.numToasysTotalTime_ValueChanged);
-
-            this.numToasysSaveCount = AddNumericRow(grpSysData, LangText("存档计数/Save Count:", "セーブ回数/Save Count:"), 12, ref sy, 0, 4294967295);
+            this.numToasysGaldSpent = AddNumericRow(grpBase, LangText("累计使用Gald:", "累計使用ガルド:"), 12, ref sy, 0, 4294967295);
+            this.numToasysGaldSpent.ValueChanged += new System.EventHandler(this.numToasysGaldSpent_ValueChanged);
+            this.numToasysSaveCount = AddNumericRow(grpBase, LangText("存档次数:", "セーブ回数:"), 12, ref sy, 0, 999999);
             this.numToasysSaveCount.ValueChanged += new System.EventHandler(this.numToasysSaveCount_ValueChanged);
-
-            this.numToasysSysFlag1 = AddNumericRow(grpSysData, LangText("系统标志1/Sys Flag1:", "システムフラグ1/Sys Flag1:"), 12, ref sy, 0, 4294967295);
-            this.numToasysSysFlag1.ValueChanged += new System.EventHandler(this.numToasysSysFlag1_ValueChanged);
-
-            this.numToasysSysFlag2 = AddNumericRow(grpSysData, LangText("系统标志2/Sys Flag2:", "システムフラグ2/Sys Flag2:"), 12, ref sy, 0, 4294967295);
-            this.numToasysSysFlag2.ValueChanged += new System.EventHandler(this.numToasysSysFlag2_ValueChanged);
-
-            this.numToasysSysFlag3 = AddNumericRow(grpSysData, LangText("系统标志3/Sys Flag3:", "システムフラグ3/Sys Flag3:"), 12, ref sy, 0, 4294967295);
-            this.numToasysSysFlag3.ValueChanged += new System.EventHandler(this.numToasysSysFlag3_ValueChanged);
-
-            this.numToasysEncounter = AddNumericRow(grpSysData, LangText("遭遇数/Encounter:", "エンカウント数/Encounter:"), 12, ref sy, 0, 4294967295);
+            this.numToasysEncounter = AddNumericRow(grpBase, LangText("遭遇数:", "エンカウント数:"), 12, ref sy, 0, 4294967295);
             this.numToasysEncounter.ValueChanged += new System.EventHandler(this.numToasysEncounter_ValueChanged);
 
-            var grpCharUsage = new GroupBox();
-            grpCharUsage.Text = LangText("角色使用次数", "キャラ使用回数");
-            grpCharUsage.Location = new Point(12, sy + 4);
-            grpCharUsage.Size = new Size(710, 140);
-            grpCharUsage.Anchor = AnchorStyles.Top | AnchorStyles.Left;
+            // 战斗记录组（右上）
+            var grpBattle = new GroupBox();
+            grpBattle.Text = LangText("战斗记录", "戦闘記録");
+            grpBattle.Location = new Point(390, 12);
+            grpBattle.Size = new Size(358, 232);
+            this.tabSystem.Controls.Add(grpBattle);
 
-            this.numToasysCharUsage = new NumericUpDown[7];
-            string[] charNames = { "卢克", "缇娅", "杰德", "阿妮丝", "凯", "娜塔莉亚", "阿修" };
-            int[] charOffsets = { 0x40, 0x44, 0x48, 0x4C, 0x50, 0x54, 0x58 };
+            int by = 22;
+            this.numToasysClearCount = AddNumericRow(grpBattle, LangText("通关次数:", "クリア回数:"), 12, ref by, 0, 9999);
+            this.numToasysClearCount.ValueChanged += new System.EventHandler(this.numToasysClearCount_ValueChanged);
+            this.numToasysEscape = AddNumericRow(grpBattle, LangText("逃跑次数:", "逃走回数:"), 12, ref by, 0, 4294967295);
+            this.numToasysEscape.ValueChanged += new System.EventHandler(this.numToasysEscape_ValueChanged);
+            this.numToasysMaxDamage = AddNumericRow(grpBattle, LangText("最大伤害:", "最大ダメージ:"), 12, ref by, 0, 999999);
+            this.numToasysMaxDamage.ValueChanged += new System.EventHandler(this.numToasysMaxDamage_ValueChanged);
+            this.numToasysMaxCombo = AddNumericRow(grpBattle, LangText("最大连击:", "最大ヒット数:"), 12, ref by, 0, 4294967295);
+            this.numToasysMaxCombo.ValueChanged += new System.EventHandler(this.numToasysMaxCombo_ValueChanged);
+            this.numToasysDamageDealt = AddNumericRow(grpBattle, LangText("造成总伤害:", "総与ダメージ:"), 12, ref by, 0, 4294967295);
+            this.numToasysDamageDealt.ValueChanged += new System.EventHandler(this.numToasysDamageDealt_ValueChanged);
+            this.numToasysDamageTaken = AddNumericRow(grpBattle, LangText("承受总伤害:", "総被ダメージ:"), 12, ref by, 0, 4294967295);
+            this.numToasysDamageTaken.ValueChanged += new System.EventHandler(this.numToasysDamageTaken_ValueChanged);
+            this.numToasysBattleTime = AddNumericRow(grpBattle, LangText("战斗总时间(帧,只读):", "総戦闘時間(フレーム):"), 12, ref by, 0, 4294967295);
+            this.numToasysBattleTime.ReadOnly = true;
 
-            for (int i = 0; i < 7; i++)
+            // 通关内容组（左下）：音效测试等通关后菜单 = 通关次数≠0（sub_333800 菜单构建）
+            var grpClear = new GroupBox();
+            grpClear.Text = LangText("通关内容", "クリア特典");
+            grpClear.Location = new Point(12, 224);
+            grpClear.Size = new Size(366, 130);
+            this.tabSystem.Controls.Add(grpClear);
+
+            this.chkSoundTest = new CheckBox();
+            this.chkSoundTest.Text = LangText("解锁音效测试等通关后菜单", "サウンドテスト等クリアメニュー解放");
+            this.chkSoundTest.Location = new Point(12, 22);
+            this.chkSoundTest.Size = new Size(340, 20);
+            this.chkSoundTest.CheckedChanged += new System.EventHandler(this.chkSoundTest_CheckedChanged);
+            grpClear.Controls.Add(this.chkSoundTest);
+
+            this.btnToasysUnlockAll = new Button();
+            this.btnToasysUnlockAll.Text = LangText("收集累计全开", "コレクション全開");
+            this.btnToasysUnlockAll.Location = new Point(12, 48);
+            this.btnToasysUnlockAll.Size = new Size(150, 24);
+            this.btnToasysUnlockAll.Click += new System.EventHandler(this.btnToasysUnlockAll_Click);
+            grpClear.Controls.Add(this.btnToasysUnlockAll);
+
+            var lblClearHint = new Label();
+            lblClearHint.Text = LangText("通关后菜单由通关次数驱动（≥1 出现）；收集累计含音效曲目等（128B 位图全开）。\nGrade商店购入项由脚本flag承载，不在此编辑。", "クリアメニューはクリア回数で解放。コレクションは128Bビットマップ。\nグレードショップはスクリプトフラグのため編集不可。");
+            lblClearHint.Location = new Point(12, 78);
+            lblClearHint.Size = new Size(344, 44);
+            lblClearHint.ForeColor = SystemColors.GrayText;
+            grpClear.Controls.Add(lblClearHint);
+
+            // 角色使用计数组（右下）：0x6C 起 6×u32，÷遭遇数=使用率
+            var grpUsage = new GroupBox();
+            grpUsage.Text = LangText("角色使用计数（÷遭遇数=使用率）", "キャラ使用回数（÷エンカウント数）");
+            grpUsage.Location = new Point(390, 252);
+            grpUsage.Size = new Size(358, 150);
+            this.tabSystem.Controls.Add(grpUsage);
+
+            this.numToasysCharUsage = new NumericUpDown[6];
+            this.lblToasysUsagePct = new Label[6];
+            string[] usageNames = { LangText("卢克", "ルーク"), LangText("缇娅", "ティア"), LangText("杰德", "ジェイド"), LangText("阿妮丝", "アニス"), LangText("凯", "ガイ"), LangText("娜塔莉亚", "ナタリア") };
+            for (int i = 0; i < 6; i++)
             {
-                int row = i;
                 var lblChar = new Label();
-                lblChar.Text = charNames[i] + ":";
-                lblChar.Location = new Point(12, 20 + row * 17);
-                lblChar.Size = new Size(60, 16);
-                grpCharUsage.Controls.Add(lblChar);
+                lblChar.Text = usageNames[i] + ":";
+                lblChar.Location = new Point(12, 22 + i * 20);
+                lblChar.Size = new Size(64, 16);
+                grpUsage.Controls.Add(lblChar);
 
                 this.numToasysCharUsage[i] = new NumericUpDown();
-                this.numToasysCharUsage[i].Location = new Point(76, 18 + row * 17);
-                this.numToasysCharUsage[i].Size = new Size(200, 20);
+                this.numToasysCharUsage[i].Location = new Point(80, 20 + i * 20);
+                this.numToasysCharUsage[i].Size = new Size(130, 20);
                 this.numToasysCharUsage[i].Minimum = 0;
                 this.numToasysCharUsage[i].Maximum = 4294967295;
                 this.numToasysCharUsage[i].Tag = i;
                 this.numToasysCharUsage[i].ValueChanged += new System.EventHandler(this.numToasysCharUsage_ValueChanged);
-                grpCharUsage.Controls.Add(this.numToasysCharUsage[i]);
-            }
+                grpUsage.Controls.Add(this.numToasysCharUsage[i]);
 
-            grpSysData.Controls.Add(grpCharUsage);
-            this.tabSystem.Controls.Add(grpSysData);
+                this.lblToasysUsagePct[i] = new Label();
+                this.lblToasysUsagePct[i].Text = "-";
+                this.lblToasysUsagePct[i].Location = new Point(218, 22 + i * 20);
+                this.lblToasysUsagePct[i].Size = new Size(120, 16);
+                grpUsage.Controls.Add(this.lblToasysUsagePct[i]);
+            }
         }
 
         private void InitItemsTab()
@@ -1163,9 +1235,36 @@ namespace TOAHEX
             this.btnGetCategoryItems.Click += new System.EventHandler(this.btnGetCategoryItems_Click);
             this.tabItems.Controls.Add(this.btnGetCategoryItems);
 
+            this.btnSaveBagState = new Button();
+            this.btnSaveBagState.Text = LangText("保存当前背包", "現在のバッグを保存");
+            this.btnSaveBagState.Location = new Point(606, 6);
+            this.btnSaveBagState.Size = new Size(120, 22);
+            this.btnSaveBagState.Click += new System.EventHandler(this.btnSaveBagState_Click);
+            this.tabItems.Controls.Add(this.btnSaveBagState);
+
+            this.lblItemWheelHint = new Label();
+            this.lblItemWheelHint.Text = LangText("悬停数量列滚动滚轮调整数量（Ctrl×10）", "数量列にカーソルを合わせホイールで調整（Ctrl×10）");
+            this.lblItemWheelHint.Location = new Point(12, 31);
+            this.lblItemWheelHint.Size = new Size(430, 16);
+            this.lblItemWheelHint.ForeColor = SystemColors.GrayText;
+            this.tabItems.Controls.Add(this.lblItemWheelHint);
+
+            // 道具搜索框：按名称（或纯数字按ID）实时过滤，与类别筛选叠加
+            var lblItemSearch = new Label();
+            lblItemSearch.Text = LangText("搜索:", "検索:");
+            lblItemSearch.Location = new Point(452, 31);
+            lblItemSearch.Size = new Size(40, 16);
+            this.tabItems.Controls.Add(lblItemSearch);
+
+            this.txtItemSearch = new TextBox();
+            this.txtItemSearch.Location = new Point(496, 28);
+            this.txtItemSearch.Size = new Size(256, 20);
+            this.txtItemSearch.TextChanged += new System.EventHandler(this.txtItemSearch_TextChanged);
+            this.tabItems.Controls.Add(this.txtItemSearch);
+
             this.dgvItems = new DataGridView();
-            this.dgvItems.Location = new Point(12, 34);
-            this.dgvItems.Size = new Size(740, 440);
+            this.dgvItems.Location = new Point(12, 50);
+            this.dgvItems.Size = new Size(740, 435);
             this.dgvItems.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             this.dgvItems.AllowUserToAddRows = false;
             this.dgvItems.AllowUserToDeleteRows = false;
@@ -1175,7 +1274,7 @@ namespace TOAHEX
             this.tabItems.Controls.Add(this.dgvItems);
         }
 
-        private NumericUpDown AddNumericRow(GroupBox parent, string label, int x, ref int y, decimal min, decimal max, int fieldWidth = 200)
+        private NumericUpDown AddNumericRow(Control parent, string label, int x, ref int y, decimal min, decimal max, int fieldWidth = 200)
         {
             var lbl = new Label();
             lbl.Text = label;
@@ -1226,7 +1325,6 @@ namespace TOAHEX
         private NumericUpDown numPlayTime;
         private NumericUpDown numEncount;
         private NumericUpDown numHit;
-        private ComboBox cmbDifficulty;
         private NumericUpDown numGrade;
         private Label lblVersion;
         private Label lblDifficulty;
@@ -1238,16 +1336,21 @@ namespace TOAHEX
 
         private Button btnJournalAll;
         private Button btnItemBookAll;
+        private NumericUpDown numGradeTotal;
 
         private Button btnGetAllEquip;
 
         private Button btnGetAllItems;
         private Button btnGetCategoryItems;
+        private Button btnSaveBagState;
 
         private ComboBox cmbCharSelect;
         private TabControl charInnerTab;
         private TabPage subTabStats;
-        private TabPage tabSubCombat;
+        private GroupBox _grpStats;
+        private Panel pnlStatBasic;
+        private Panel pnlStatCombat;
+        private Button btnStatToggle;
         private TabPage subTabEquip;
         private TabPage subTabArtes;
         private TabPage subTabADSkill;
@@ -1267,17 +1370,24 @@ namespace TOAHEX
         private NumericUpDown numOvlGauge;
         private Label lblTitle;
         private Button btnTitleChange;
-        private ComboBox cmbWeapon;
-        private ComboBox cmbArmor;
-        private ComboBox cmbAcc1;
-        private ComboBox cmbAcc2;
-        private ComboBox cmbKyouritsufu;
+        private Label[] lblEquip;
+        private Button[] btnEquipChange;
+        private ComboBox cmbDifficulty;
         private ComboBox cmbLeader;
         private Label[] lblArte;
         private Button[] btnArteChange;
         private CheckedListBox clbArteLearned;
 
         private NumericUpDown numGrowthPoints;
+        private CheckBox chkLevelGrowth;
+        private NumericUpDown numGrowHP;
+        private NumericUpDown numGrowTP;
+        private NumericUpDown numGrowPATK;
+        private NumericUpDown numGrowPDEF;
+        private NumericUpDown numGrowFATK;
+        private NumericUpDown numGrowFDEF;
+        private NumericUpDown numGrowAGI;
+        private NumericUpDown numGrowLUK;
         private CheckedListBox clbADSkills;
         private Button btnADSelectAll;
         private Button btnADDeselectAll;
@@ -1287,6 +1397,8 @@ namespace TOAHEX
 
         private ComboBox cmbItemCategory;
         private DataGridView dgvItems;
+        private Label lblItemWheelHint;
+        private TextBox txtItemSearch;
 
         private CheckedListBox clbCooking;
         private Button btnCookingSelectAll;
@@ -1319,18 +1431,27 @@ namespace TOAHEX
         private NumericUpDown numToasysDifficulty;
         private NumericUpDown numToasysGald;
         private NumericUpDown numToasysPlaytime;
-        private NumericUpDown numToasysTotalTime;
+        private NumericUpDown numToasysGaldSpent;
         private NumericUpDown numToasysSaveCount;
-        private NumericUpDown numToasysSysFlag1;
-        private NumericUpDown numToasysSysFlag2;
-        private NumericUpDown numToasysSysFlag3;
         private NumericUpDown numToasysEncounter;
+        private NumericUpDown numToasysClearCount;
+        private NumericUpDown numToasysEscape;
+        private NumericUpDown numToasysMaxDamage;
+        private NumericUpDown numToasysMaxCombo;
+        private NumericUpDown numToasysDamageDealt;
+        private NumericUpDown numToasysDamageTaken;
+        private NumericUpDown numToasysBattleTime;
+        private CheckBox chkSoundTest;
+        private Button btnToasysUnlockAll;
         private NumericUpDown[] numToasysCharUsage;
+        private Label[] lblToasysUsagePct;
 
         private Button btnMaxAllLevel;
         private Button btnAllTitles;
         private Button btnAllADSkills;
         private Button btnAllFSMax;
         private Button btnAllCookingMax;
+        private Button btnAllItemsMax;
+        private Button btnCharName;
     }
 }

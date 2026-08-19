@@ -45,12 +45,14 @@
     <Compile Include="SaveOffsets.cs" />
     <Compile Include="ChecksumHelper.cs" />
     <Compile Include="SaveData.cs" />
+    <Compile Include="TblCodec.cs" />
     <Compile Include="ItemData.cs" />
     <Compile Include="Database\ItemDatabase.cs" />
     <Compile Include="Database\ArteDatabase.cs" />
     <Compile Include="Database\ADSkillDatabase.cs" />
     <Compile Include="Database\TitleDatabase.cs" />
     <Compile Include="ArteSelectForm.cs" />
+    <Compile Include="EquipSelectForm.cs" />
     <Compile Include="TitleSelectForm.cs" />
     <Compile Include="Database\CookingDatabase.cs" />
     <Compile Include="LanguageConfig.cs" />
@@ -71,6 +73,9 @@
     <EmbeddedResource Include="Icon\asch.png" />
     <EmbeddedResource Include="Icon\pen.png" />
     <EmbeddedResource Include="Icon\File.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="new_patched.tbl" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
