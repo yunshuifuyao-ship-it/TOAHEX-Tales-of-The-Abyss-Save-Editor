@@ -59,6 +59,8 @@
     <Compile Include="DatDataLoader.cs" />
     <Compile Include="Database\EquipIndexDatabase.cs" />
     <Compile Include="Database\KyouritsufuDatabase.cs" />
+    <Compile Include="Database\StoryJumpDatabase.cs" />
+    <Compile Include="Database\SideQuestJumpDatabase.cs" />
     <Compile Include="MainForm.cs" />
     <Compile Include="MainForm.Designer.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

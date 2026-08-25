@@ -42,6 +42,7 @@ namespace TOAHEX
             this.tabCooking = new TabPage();
             this.tabFSChamber = new TabPage();
             this.tabSystem = new TabPage();
+            this.tabSystemKills = new TabPage();
             this.menuFileOpen.Name = "menuFileOpen";
             this.menuFileSave.Name = "menuFileSave";
             this.menuFileSaveAs.Name = "menuFileSaveAs";
@@ -130,13 +131,17 @@ namespace TOAHEX
             this.tabControl.Controls.Add(this.tabItems);
             this.tabControl.Controls.Add(this.tabCooking);
             this.tabControl.Controls.Add(this.tabFSChamber);
+            this.tabStoryJump = new TabPage();
+            this.tabControl.Controls.Add(this.tabStoryJump);
 
             InitGlobalTab();
             InitCharacterTab();
             InitItemsTab();
             InitCookingTab();
             InitFSChamberTab();
+            InitStoryJumpTab();
             InitSystemTab();
+            InitSystemKillsTab();
 
             this.AutoScaleMode = AutoScaleMode.None;
             this.FormBorderStyle = FormBorderStyle.FixedSingle;
@@ -147,7 +152,7 @@ namespace TOAHEX
             this.MainMenuStrip = this.menuStrip;
             this.MaximizeBox = false;
             this.Name = "MainForm";
-            this.Text = LangText("TOAHEX v1.0 - Tales of the Abyss Save Editor", "TOAHEX v1.0 - Tales of the Abyss Save Editor");
+            this.Text = LangText("TOAHEX v1.1 - Tales of the Abyss Save Editor", "TOAHEX v1.1 - Tales of the Abyss Save Editor");
             this.Icon = LoadAppIcon();
             this.AllowDrop = true;
             this.KeyPreview = true;
@@ -642,6 +647,8 @@ namespace TOAHEX
             this.numBaseLUCK.ValueChanged += new System.EventHandler(this.numBaseLUCK_ValueChanged);
             this.numOvlGauge = AddNumericRow(pnlStatCombat, LangText("OVL", "OVLゲージ:"), 12, ref cy, 0, 1000);
             this.numOvlGauge.ValueChanged += new System.EventHandler(this.numOvlGauge_ValueChanged);
+            this.numKillCount = AddNumericRow(pnlStatCombat, LangText("杀敌数(魔武器):", "撃破数(魔武器):"), 12, ref cy, 0, 999999);
+            this.numKillCount.ValueChanged += new System.EventHandler(this.numKillCount_ValueChanged);
 
             // C-Core 加成已按用户要求隐藏：控件保留在无父容器中（不显示），
             // 仅维持 RefreshCharFields 装载/幸运联动逻辑不抛空引用
@@ -1201,6 +1208,50 @@ namespace TOAHEX
             }
         }
 
+        private void InitSystemKillsTab()
+        {
+            this.tabSystemKills.Location = new Point(4, 22);
+            this.tabSystemKills.Name = "tabSystemKills";
+            this.tabSystemKills.Padding = new Padding(3);
+            this.tabSystemKills.Size = new Size(760, 495);
+            this.tabSystemKills.TabIndex = 5;
+            this.tabSystemKills.Text = LangText("角色杀敌数(魔武器)", "キャラ撃破数(魔武器)");
+            this.tabSystemKills.UseVisualStyleBackColor = true;
+
+            var grpKills = new GroupBox();
+            grpKills.Text = LangText("角色杀敌数（魔武器攻击力加成，上限999999）", "キャラ撃破数（魔武器攻撃力加算、上限999999）");
+            grpKills.Location = new Point(12, 12);
+            grpKills.Size = new Size(366, 200);
+            this.tabSystemKills.Controls.Add(grpKills);
+
+            this.numToasysKillCount = new NumericUpDown[7];
+            string[] killNames = { LangText("卢克", "ルーク"), LangText("缇娅", "ティア"), LangText("杰德", "ジェイド"), LangText("阿妮丝", "アニス"), LangText("凯", "ガイ"), LangText("娜塔莉亚", "ナタリア"), LangText("阿修", "アッシュ") };
+            for (int i = 0; i < 7; i++)
+            {
+                var lblChar = new Label();
+                lblChar.Text = killNames[i] + ":";
+                lblChar.Location = new Point(12, 22 + i * 20);
+                lblChar.Size = new Size(64, 16);
+                grpKills.Controls.Add(lblChar);
+
+                this.numToasysKillCount[i] = new NumericUpDown();
+                this.numToasysKillCount[i].Location = new Point(80, 20 + i * 20);
+                this.numToasysKillCount[i].Size = new Size(130, 20);
+                this.numToasysKillCount[i].Minimum = 0;
+                this.numToasysKillCount[i].Maximum = 999999;
+                this.numToasysKillCount[i].Tag = i;
+                this.numToasysKillCount[i].ValueChanged += new System.EventHandler(this.numToasysKillCount_ValueChanged);
+                grpKills.Controls.Add(this.numToasysKillCount[i]);
+            }
+
+            var lblKillsHint = new Label();
+            lblKillsHint.Text = LangText("杀敌数驱动魔武器攻击力（每杀1敌+1攻）。TOASYS 为跨周目累计（NG+继承），单个 TOA_XXX 存档为当前周目。", "撃破数は魔武器攻撃力に反映（1撃破=+1攻）。TOASYSは周回累計（NG+引継）、TOA_XXXは現周回分。");
+            lblKillsHint.Location = new Point(12, 170);
+            lblKillsHint.Size = new Size(344, 28);
+            lblKillsHint.ForeColor = SystemColors.GrayText;
+            grpKills.Controls.Add(lblKillsHint);
+        }
+
         private void InitItemsTab()
         {
             this.tabItems.Location = new Point(4, 22);
@@ -1323,6 +1374,7 @@ namespace TOAHEX
         private TabPage tabItems;
         private TabPage tabCooking;
         private TabPage tabSystem;
+        private TabPage tabSystemKills;
 
         private NumericUpDown numGald;
         private NumericUpDown numPlayTime;
@@ -1371,6 +1423,7 @@ namespace TOAHEX
         private NumericUpDown numBaseAGI;
         private NumericUpDown numBaseLUCK;
         private NumericUpDown numOvlGauge;
+        private NumericUpDown numKillCount;
         private Label lblTitle;
         private Button btnTitleChange;
         private Label[] lblEquip;
@@ -1416,6 +1469,37 @@ namespace TOAHEX
         private NumericUpDown numCCoreLUK;
 
         private TabPage tabFSChamber;
+        private TabPage tabStoryJump;
+        private TabControl subStoryTab;
+
+        // 剧情跳跃标签页控件
+        private Label lblStoryCurrentEvent;
+        private Label lblStoryCurrentEventVal;
+        private Label lblStoryCurrentMap;
+        private Label lblStoryCurrentMapVal;
+        private Label lblStoryCurrentChapter;
+        private Label lblStoryCurrentChapterVal;
+        private Label lblStoryChapterSelect;
+        private ComboBox cmbStoryChapter;
+        private TextBox txtStorySearch;
+        private Label lblStoryBranchSelect;
+        private ListBox lstStoryBranches;
+        private Label lblStoryTargetInfo;
+        private Button btnStoryJump;
+        private Button btnStoryJumpNoEvent;
+
+        // 支线修改 + 能力习得 控件
+        private ComboBox cmbSidePage;
+        private TextBox txtSideSearch;
+        private ListBox lstSideQuests;
+        private Label lblSideTargetInfo;
+        private Button btnSideJump;
+        private Button btnSideToggleComplete;
+        private Button btnSideAllDone;
+        private Button btnSideAllReset;
+        private ListBox lstQuestSummary;
+        private Label[] lblAbilityItems;
+        private Label lblSideDoneStatus;
         private ComboBox cmbFSCharSelect;
         private DataGridView dgvFSChamber;
         private NumericUpDown[] numFSChamberMax;
@@ -1448,6 +1532,7 @@ namespace TOAHEX
         private Button btnToasysUnlockAll;
         private NumericUpDown[] numToasysCharUsage;
         private Label[] lblToasysUsagePct;
+        private NumericUpDown[] numToasysKillCount;
 
         private Button btnMaxAllLevel;
         private Button btnAllTitles;
@@ -1456,5 +1541,261 @@ namespace TOAHEX
         private Button btnAllCookingMax;
         private Button btnAllItemsMax;
         private Button btnCharName;
+
+        private void InitStoryJumpTab()
+        {
+            // tabStoryJump 已在 InitializeComponent 中创建并添加到 tabControl，此处直接使用
+            this.tabStoryJump.Text = LangText("剧情跳跃", "ストーリージャンプ");
+            this.tabStoryJump.Padding = new Padding(3);
+            this.tabStoryJump.UseVisualStyleBackColor = true;
+
+            // === 当前剧情进度显示区（左侧，缩小） ===
+            var grpCurrent = new GroupBox();
+            grpCurrent.Text = LangText("当前存档剧情进度", "現在のストーリー進行");
+            grpCurrent.Location = new Point(8, 8);
+            grpCurrent.Size = new Size(500, 90);
+            this.tabStoryJump.Controls.Add(grpCurrent);
+
+            this.lblStoryCurrentEvent = new Label();
+            this.lblStoryCurrentEvent.Text = LangText("当前事件:", "現在イベント:");
+            this.lblStoryCurrentEvent.Location = new Point(12, 20);
+            this.lblStoryCurrentEvent.Size = new Size(70, 18);
+            grpCurrent.Controls.Add(this.lblStoryCurrentEvent);
+
+            this.lblStoryCurrentEventVal = new Label();
+            this.lblStoryCurrentEventVal.Location = new Point(82, 20);
+            this.lblStoryCurrentEventVal.Size = new Size(408, 18);
+            this.lblStoryCurrentEventVal.ForeColor = System.Drawing.Color.Blue;
+            grpCurrent.Controls.Add(this.lblStoryCurrentEventVal);
+
+            this.lblStoryCurrentMap = new Label();
+            this.lblStoryCurrentMap.Text = LangText("当前地图:", "現在マップ:");
+            this.lblStoryCurrentMap.Location = new Point(12, 40);
+            this.lblStoryCurrentMap.Size = new Size(70, 18);
+            grpCurrent.Controls.Add(this.lblStoryCurrentMap);
+
+            this.lblStoryCurrentMapVal = new Label();
+            this.lblStoryCurrentMapVal.Location = new Point(82, 40);
+            this.lblStoryCurrentMapVal.Size = new Size(408, 18);
+            this.lblStoryCurrentMapVal.ForeColor = System.Drawing.Color.Blue;
+            grpCurrent.Controls.Add(this.lblStoryCurrentMapVal);
+
+            this.lblStoryCurrentChapter = new Label();
+            this.lblStoryCurrentChapter.Text = LangText("推断章节:", "推定章:");
+            this.lblStoryCurrentChapter.Location = new Point(12, 60);
+            this.lblStoryCurrentChapter.Size = new Size(70, 18);
+            grpCurrent.Controls.Add(this.lblStoryCurrentChapter);
+
+            this.lblStoryCurrentChapterVal = new Label();
+            this.lblStoryCurrentChapterVal.Location = new Point(82, 60);
+            this.lblStoryCurrentChapterVal.Size = new Size(408, 18);
+            this.lblStoryCurrentChapterVal.ForeColor = System.Drawing.Color.Blue;
+            grpCurrent.Controls.Add(this.lblStoryCurrentChapterVal);
+
+            // === 缪能力（右侧，纵向排列，双击切换；超振动已隐藏） ===
+            var grpAbility = new GroupBox();
+            grpAbility.Text = LangText("缪能力（双击切换档位）", "ミュウ能力（ダブルクリックで段階切替）");
+            grpAbility.Location = new Point(516, 8);
+            grpAbility.Size = new Size(236, 82);
+            this.tabStoryJump.Controls.Add(grpAbility);
+
+            int[] abilityY = { 18, 38, 58 };
+            this.lblAbilityItems = new Label[3];
+            for (int i = 0; i < 3; i++)
+            {
+                var lbl = new Label();
+                lbl.Location = new Point(12, abilityY[i]);
+                lbl.Size = new Size(214, 16);
+                lbl.Tag = i;
+                lbl.Cursor = System.Windows.Forms.Cursors.Hand;
+                lbl.ForeColor = System.Drawing.Color.DarkGreen;
+                lbl.DoubleClick += new System.EventHandler(this.lblAbility_DoubleClick);
+                grpAbility.Controls.Add(lbl);
+                this.lblAbilityItems[i] = lbl;
+            }
+
+            // === 子标签页：主线修改 + 支线修改 ===
+            this.subStoryTab = new TabControl();
+            this.subStoryTab.Location = new Point(8, 104);
+            this.subStoryTab.Size = new Size(744, 392);
+            this.tabStoryJump.Controls.Add(this.subStoryTab);
+
+            // ---- 主线修改 ----
+            var tabMainJump = new TabPage();
+            tabMainJump.Text = LangText("主线修改", "メインストーリー編集");
+            tabMainJump.Padding = new Padding(3);
+            tabMainJump.UseVisualStyleBackColor = true;
+            this.subStoryTab.Controls.Add(tabMainJump);
+
+            this.lblStoryChapterSelect = new Label();
+            this.lblStoryChapterSelect.Text = LangText("章节:", "章:");
+            this.lblStoryChapterSelect.Location = new Point(12, 14);
+            this.lblStoryChapterSelect.Size = new Size(50, 18);
+            tabMainJump.Controls.Add(this.lblStoryChapterSelect);
+
+            this.cmbStoryChapter = new ComboBox();
+            this.cmbStoryChapter.Location = new Point(66, 12);
+            this.cmbStoryChapter.Size = new Size(180, 20);
+            this.cmbStoryChapter.DropDownStyle = ComboBoxStyle.DropDownList;
+            this.cmbStoryChapter.SelectedIndexChanged += new System.EventHandler(this.cmbStoryChapter_SelectedIndexChanged);
+            tabMainJump.Controls.Add(this.cmbStoryChapter);
+
+            var lblStorySearch = new Label();
+            lblStorySearch.Text = LangText("搜索:", "検索:");
+            lblStorySearch.Location = new Point(252, 14);
+            lblStorySearch.Size = new Size(45, 18);
+            tabMainJump.Controls.Add(lblStorySearch);
+
+            this.txtStorySearch = new TextBox();
+            this.txtStorySearch.Location = new Point(300, 12);
+            this.txtStorySearch.Size = new Size(170, 20);
+            this.txtStorySearch.TextChanged += new System.EventHandler(this.txtStorySearch_TextChanged);
+            tabMainJump.Controls.Add(this.txtStorySearch);
+
+            this.lblStoryBranchSelect = new Label();
+            this.lblStoryBranchSelect.Text = LangText("分支:", "シーン:");
+            this.lblStoryBranchSelect.Location = new Point(12, 40);
+            this.lblStoryBranchSelect.Size = new Size(50, 18);
+            tabMainJump.Controls.Add(this.lblStoryBranchSelect);
+
+            this.lstStoryBranches = new ListBox();
+            this.lstStoryBranches.Location = new Point(66, 40);
+            this.lstStoryBranches.Size = new Size(450, 255);
+            this.lstStoryBranches.SelectedIndexChanged += new System.EventHandler(this.lstStoryBranches_SelectedIndexChanged);
+            tabMainJump.Controls.Add(this.lstStoryBranches);
+
+            this.lblStoryTargetInfo = new Label();
+            this.lblStoryTargetInfo.Location = new Point(526, 40);
+            this.lblStoryTargetInfo.Size = new Size(208, 220);
+            this.lblStoryTargetInfo.Text = "";
+            tabMainJump.Controls.Add(this.lblStoryTargetInfo);
+
+            this.btnStoryJump = new Button();
+            this.btnStoryJump.Text = LangText("跳转（地图+事件）", "ジャンプ(マップ+イベント)");
+            this.btnStoryJump.Location = new Point(66, 300);
+            this.btnStoryJump.Size = new Size(200, 30);
+            this.btnStoryJump.Enabled = false;
+            this.btnStoryJump.Click += new System.EventHandler(this.btnStoryJump_Click);
+            tabMainJump.Controls.Add(this.btnStoryJump);
+
+            this.btnStoryJumpNoEvent = new Button();
+            this.btnStoryJumpNoEvent.Text = LangText("仅跳地图", "マップのみ");
+            this.btnStoryJumpNoEvent.Location = new Point(276, 300);
+            this.btnStoryJumpNoEvent.Size = new Size(140, 30);
+            this.btnStoryJumpNoEvent.Enabled = false;
+            this.btnStoryJumpNoEvent.Click += new System.EventHandler(this.btnStoryJumpNoEvent_Click);
+            tabMainJump.Controls.Add(this.btnStoryJumpNoEvent);
+
+            // ---- 支线修改 ----
+            InitSideEditPage();
+
+            // 填充章节下拉框
+            if (StoryJumpDatabase.IsLoaded)
+            {
+                foreach (int chNum in StoryJumpDatabase.GetChapters())
+                {
+                    var ch = StoryJumpDatabase.GetChapter(chNum);
+                    if (ch != null)
+                        this.cmbStoryChapter.Items.Add(string.Format("{0} ({1}分支)", ch.chapter_name, ch.menu_branch_count));
+                }
+                if (this.cmbStoryChapter.Items.Count > 0)
+                    this.cmbStoryChapter.SelectedIndex = 0;
+            }
+
+            // 初始化能力/支线状态显示（未加载存档时显示"未加载"）
+            RefreshAbilityStatus();
+            RefreshSideDoneStatus();
+        }
+
+        private void InitSideEditPage()
+        {
+            var tabSideEdit = new TabPage();
+            tabSideEdit.Text = LangText("支线修改", "サブクエスト編集");
+            tabSideEdit.Padding = new Padding(3);
+            tabSideEdit.UseVisualStyleBackColor = true;
+            this.subStoryTab.Controls.Add(tabSideEdit);
+
+            this.lblSideDoneStatus = new Label();
+            this.lblSideDoneStatus.Location = new Point(12, 6);
+            this.lblSideDoneStatus.Size = new Size(720, 18);
+            this.lblSideDoneStatus.ForeColor = System.Drawing.Color.DarkGreen;
+            tabSideEdit.Controls.Add(this.lblSideDoneStatus);
+
+            this.cmbSidePage = new ComboBox();
+            this.cmbSidePage.Location = new Point(12, 28);
+            this.cmbSidePage.Size = new Size(80, 20);
+            this.cmbSidePage.DropDownStyle = ComboBoxStyle.DropDownList;
+            this.cmbSidePage.SelectedIndexChanged += new System.EventHandler(this.cmbSidePage_SelectedIndexChanged);
+            tabSideEdit.Controls.Add(this.cmbSidePage);
+
+            this.txtSideSearch = new TextBox();
+            this.txtSideSearch.Location = new Point(96, 28);
+            this.txtSideSearch.Size = new Size(110, 20);
+            this.txtSideSearch.TextChanged += new System.EventHandler(this.txtSideSearch_TextChanged);
+            tabSideEdit.Controls.Add(this.txtSideSearch);
+
+            this.btnSideAllDone = new Button();
+            this.btnSideAllDone.Text = LangText("全部完成", "全部完了");
+            this.btnSideAllDone.Location = new Point(212, 26);
+            this.btnSideAllDone.Size = new Size(80, 24);
+            this.btnSideAllDone.Click += new System.EventHandler(this.btnSideAllDone_Click);
+            tabSideEdit.Controls.Add(this.btnSideAllDone);
+
+            this.btnSideAllReset = new Button();
+            this.btnSideAllReset.Text = LangText("全部重置", "全部リセット");
+            this.btnSideAllReset.Location = new Point(296, 26);
+            this.btnSideAllReset.Size = new Size(80, 24);
+            this.btnSideAllReset.Click += new System.EventHandler(this.btnSideAllReset_Click);
+            tabSideEdit.Controls.Add(this.btnSideAllReset);
+
+            this.btnSideToggleComplete = new Button();
+            this.btnSideToggleComplete.Text = LangText("切换完成状态", "完了状態を切替");
+            this.btnSideToggleComplete.Location = new Point(380, 26);
+            this.btnSideToggleComplete.Size = new Size(120, 24);
+            this.btnSideToggleComplete.Enabled = false;
+            this.btnSideToggleComplete.Click += new System.EventHandler(this.btnSideToggleComplete_Click);
+            tabSideEdit.Controls.Add(this.btnSideToggleComplete);
+
+            this.btnSideJump = new Button();
+            this.btnSideJump.Text = LangText("跳转（地图+事件+flag）", "ジャンプ(マップ+イベント+flag)");
+            this.btnSideJump.Location = new Point(504, 26);
+            this.btnSideJump.Size = new Size(228, 24);
+            this.btnSideJump.Enabled = false;
+            this.btnSideJump.Click += new System.EventHandler(this.btnSideJump_Click);
+            tabSideEdit.Controls.Add(this.btnSideJump);
+
+            this.lstSideQuests = new ListBox();
+            this.lstSideQuests.Location = new Point(12, 58);
+            this.lstSideQuests.Size = new Size(420, 290);
+            this.lstSideQuests.SelectedIndexChanged += new System.EventHandler(this.lstSideQuests_SelectedIndexChanged);
+            this.lstSideQuests.DoubleClick += new System.EventHandler(this.lstSideQuests_DoubleClick);
+            tabSideEdit.Controls.Add(this.lstSideQuests);
+
+            this.lblSideTargetInfo = new Label();
+            this.lblSideTargetInfo.Location = new Point(440, 58);
+            this.lblSideTargetInfo.Size = new Size(292, 115);
+            this.lblSideTargetInfo.Text = "";
+            tabSideEdit.Controls.Add(this.lblSideTargetInfo);
+
+            var lblQuestSummaryTitle = new Label();
+            lblQuestSummaryTitle.Text = LangText("聚合完成度（多步任务）：", "クエスト集計完了度：");
+            lblQuestSummaryTitle.Location = new Point(440, 177);
+            lblQuestSummaryTitle.Size = new Size(292, 16);
+            lblQuestSummaryTitle.ForeColor = System.Drawing.Color.DarkBlue;
+            tabSideEdit.Controls.Add(lblQuestSummaryTitle);
+
+            this.lstQuestSummary = new ListBox();
+            this.lstQuestSummary.Location = new Point(440, 195);
+            this.lstQuestSummary.Size = new Size(292, 153);
+            tabSideEdit.Controls.Add(this.lstQuestSummary);
+
+            foreach (int pg in SideQuestJumpDatabase.GetPages())
+            {
+                this.cmbSidePage.Items.Add(string.Format(LangText("第 {0} 页", "第{0}ページ"), pg));
+            }
+            if (this.cmbSidePage.Items.Count > 0)
+                this.cmbSidePage.SelectedIndex = 0;
+        }
+
     }
 }

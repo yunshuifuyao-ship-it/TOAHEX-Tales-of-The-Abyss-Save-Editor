@@ -46,7 +46,7 @@ namespace TOAHEX
 
         private void RefreshAllUI()
         {
-            this.Text = LangText("TOAHEX v1.0 - Tales of the Abyss Save Editor", "TOAHEX v1.0 - Tales of the Abyss Save Editor");
+            this.Text = LangText("TOAHEX v1.1 - Tales of the Abyss Save Editor", "TOAHEX v1.1 - Tales of the Abyss Save Editor");
             menuFile.Text = LangText("文件", "ファイル");
             menuFileOpen.Text = LangText("打开", "開く");
             menuFileSave.Text = LangText("保存", "保存");
@@ -259,11 +259,14 @@ namespace TOAHEX
             {
                 if (!tabControl.TabPages.Contains(tabSystem))
                     tabControl.TabPages.Add(tabSystem);
+                if (!tabControl.TabPages.Contains(tabSystemKills))
+                    tabControl.TabPages.Add(tabSystemKills);
                 tabControl.TabPages.Remove(tabGlobal);
                 tabControl.TabPages.Remove(tabCharacter);
                 tabControl.TabPages.Remove(tabItems);
                 tabControl.TabPages.Remove(tabCooking);
                 tabControl.TabPages.Remove(tabFSChamber);
+                tabControl.TabPages.Remove(tabStoryJump);
                 tabControl.SelectedTab = tabSystem;
                 try { LoadToasysData(); } catch { }
             }
@@ -279,7 +282,10 @@ namespace TOAHEX
                     tabControl.TabPages.Add(tabCooking);
                 if (!tabControl.TabPages.Contains(tabFSChamber))
                     tabControl.TabPages.Add(tabFSChamber);
+                if (!tabControl.TabPages.Contains(tabStoryJump))
+                    tabControl.TabPages.Add(tabStoryJump);
                 tabControl.TabPages.Remove(tabSystem);
+                tabControl.TabPages.Remove(tabSystemKills);
                 numGald.Enabled = true;
                 numPlayTime.Enabled = true;
                 try { LoadGlobalData(); } catch { }
@@ -597,6 +603,9 @@ namespace TOAHEX
             {
                 _loading = false;
             }
+
+            // 刷新剧情跳跃标签页
+            try { RefreshStoryJumpTab(); } catch { }
         }
 
         private void numGald_ValueChanged(object sender, EventArgs e)
@@ -1066,6 +1075,7 @@ namespace TOAHEX
                 try { SetNumericSafe(numBaseAGI, _saveData.ReadU32(baseOff + SaveOffsets.CHAR_BASE_AGI)); } catch { numBaseAGI.Value = numBaseAGI.Minimum; }
                 try { SetNumericSafe(numBaseLUCK, _saveData.ReadU32(baseOff + SaveOffsets.CHAR_LUCK)); } catch { numBaseLUCK.Value = numBaseLUCK.Minimum; }
                 try { SetNumericSafe(numOvlGauge, _saveData.ReadOvlGauge(idx)); } catch { numOvlGauge.Value = numOvlGauge.Minimum; }
+                try { SetNumericSafe(numKillCount, _saveData.ReadU32(SaveOffsets.BODY_CHAR_KILLS + (idx - 1) * 4)); } catch { numKillCount.Value = numKillCount.Minimum; }
                 try { SetNumericSafe(numGrowthPoints, _saveData.ReadU16(baseOff + SaveOffsets.CHAR_GROWTH_POINTS)); } catch { numGrowthPoints.Value = numGrowthPoints.Minimum; }
 
                 int charIdx = cmbCharSelect.SelectedIndex + 1;
@@ -1290,6 +1300,7 @@ namespace TOAHEX
         private void numBaseAGI_ValueChanged(object sender, EventArgs e) { if (_loading || _saveData == null) return; int idx = cmbCharSelect.SelectedIndex + 1; if (idx < 1 || idx > 7) return; int baseOff = _saveData.GetCharBaseOffset(idx); uint newBase = (uint)numBaseAGI.Value; uint ccore = _saveData.ReadU32(baseOff + SaveOffsets.CHAR_CCORE_AGI); uint equipBonus = _saveData.ReadU32(baseOff + SaveOffsets.CHAR_AGI) - _saveData.ReadU32(baseOff + SaveOffsets.CHAR_BASE_AGI) - ccore; _saveData.WriteU32(baseOff + SaveOffsets.CHAR_BASE_AGI, newBase); _saveData.WriteU32(baseOff + SaveOffsets.CHAR_AGI, newBase + ccore + equipBonus); }
         private void numBaseLUCK_ValueChanged(object sender, EventArgs e) { if (_loading || _saveData == null) return; int idx = cmbCharSelect.SelectedIndex + 1; if (idx < 1 || idx > 7) return; _saveData.WriteLuckBase(idx, (uint)numBaseLUCK.Value); }
         private void numOvlGauge_ValueChanged(object sender, EventArgs e) { if (_loading || _saveData == null) return; int idx = cmbCharSelect.SelectedIndex + 1; if (idx < 1 || idx > 7) return; _saveData.WriteOvlGauge(idx, (ushort)numOvlGauge.Value); }
+        private void numKillCount_ValueChanged(object sender, EventArgs e) { if (_loading || _saveData == null) return; int idx = cmbCharSelect.SelectedIndex + 1; if (idx < 1 || idx > 7) return; _saveData.WriteU32(SaveOffsets.BODY_CHAR_KILLS + (idx - 1) * 4, (uint)numKillCount.Value); }
         private void numGrowthPoints_ValueChanged(object sender, EventArgs e) { if (_loading || _saveData == null) return; int idx = cmbCharSelect.SelectedIndex + 1; if (idx < 1 || idx > 7) return; int baseOff = _saveData.GetCharBaseOffset(idx); _saveData.WriteU16(baseOff + SaveOffsets.CHAR_GROWTH_POINTS, (ushort)numGrowthPoints.Value); }
 
         // 基础/战斗属性面板互斥切换：组标题随面板变化，按钮仅切换文字（C-Core 编辑已隐藏）
@@ -2025,6 +2036,10 @@ namespace TOAHEX
                     try { SetNumericSafe(numToasysCharUsage[i], _saveData.ReadU32(SaveOffsets.TOASYS_CHAR_USAGE + i * 4)); } catch { }
                     UpdateUsagePct(i);
                 }
+                for (int i = 0; i < SaveOffsets.CHAR_KILL_COUNT; i++)
+                {
+                    try { SetNumericSafe(numToasysKillCount[i], _saveData.ReadU32(SaveOffsets.TOASYS_CHAR_KILLS + i * 4)); } catch { }
+                }
             }
             finally
             {
@@ -2057,6 +2072,13 @@ namespace TOAHEX
             int idx = (int)((NumericUpDown)sender).Tag;
             _saveData.WriteU32(SaveOffsets.TOASYS_CHAR_USAGE + idx * 4, (uint)((NumericUpDown)sender).Value);
             UpdateUsagePct(idx);
+        }
+
+        private void numToasysKillCount_ValueChanged(object sender, EventArgs e)
+        {
+            if (_loading || _saveData == null) return;
+            int idx = (int)((NumericUpDown)sender).Tag;
+            _saveData.WriteU32(SaveOffsets.TOASYS_CHAR_KILLS + idx * 4, (uint)((NumericUpDown)sender).Value);
         }
 
         // 使用率% = 计数 ÷ 遭遇数（0x1C）
@@ -2109,5 +2131,638 @@ namespace TOAHEX
             public string Name { get; set; }
             public override string ToString() { return Name; }
         }
+
+        #region 剧情跳跃标签页
+
+        private StoryJumpDatabase.JumpEntry _selectedJumpEntry;
+
+        /// <summary>
+        /// 刷新剧情跳跃标签页的当前进度显示
+        /// </summary>
+        private void RefreshStoryJumpTab()
+        {
+            if (_saveData == null || _saveData.Type != SaveType.ToaXxx)
+            {
+                lblStoryCurrentEventVal.Text = LangText("(未加载)", "(未読み込み)");
+                lblStoryCurrentMapVal.Text = LangText("(未加载)", "(未読み込み)");
+                lblStoryCurrentChapterVal.Text = LangText("(未加载)", "(未読み込み)");
+                lblSideDoneStatus.Text = LangText("(未加载)", "(未読み込み)");
+                RefreshAbilityStatus();
+                return;
+            }
+
+            try
+            {
+                uint eventId = _saveData.ReadU32(SaveOffsets.BODY_EVENT_ID);
+                uint mapId = _saveData.ReadU32(SaveOffsets.BODY_MAP_ID);
+                string mapName = StoryJumpDatabase.GetMapName(mapId);
+                string eventDesc = StoryJumpDatabase.GetEventDescription(eventId);
+                int chapter = StoryJumpDatabase.EventIdToChapter(eventId);
+
+                lblStoryCurrentEventVal.Text = string.Format("{0} ({1})", eventDesc, eventId);
+                lblStoryCurrentMapVal.Text = string.Format("{0} ({1})", mapName, mapId);
+                lblStoryCurrentChapterVal.Text = chapter > 0
+                    ? string.Format(LangText("第 {0} 章", "第{0}章"), chapter)
+                    : LangText("未知/特殊", "不明/特殊");
+            }
+            catch
+            {
+                lblStoryCurrentEventVal.Text = LangText("(读取失败)", "(読込失敗)");
+            }
+
+            RefreshAbilityStatus();
+            RefreshSideDoneStatus();
+        }
+
+        /// <summary>缪能力真实存储（MYU 000~004 存档差分 + SB7 ICB415 脚本定案）：
+        /// 脚本变量 var149=缪火焰等级(0/1/2)、var150=缪撞击(0/1)、var151=缪飞天(0/1)，值在变量 8 字节结构 +0(value:u32)。
+        /// 游戏判定是层级依赖：撞击=任意 var>0；火焰=var150>0 或 var151>0；飞行=var151>0。
+        /// 故 var149 单独设只会表现为"撞击"（火焰需撞击/飞行解锁）。
+        /// 双击 5 档循环（用户实测定案顺序）：未习得→缪撞击→火焰一级→缪飞天→火焰二级。</summary>
+        private static readonly int[][] ABILITY_LEVELS = {
+            new[] { 0, 0, 0 },  // 0 未习得
+            new[] { 1, 0, 0 },  // 1 缪撞击（var149=1，火焰未解锁→仅撞击）
+            new[] { 1, 1, 0 },  // 2 火焰一级（+var150=1 撞击解锁火焰）
+            new[] { 1, 1, 1 },  // 3 缪飞天（+var151=1）
+            new[] { 2, 1, 1 },  // 4 火焰二级（var149=2）
+        };
+        private static readonly string[] ABILITY_LEVEL_NAMES_CN = {
+            "未习得", "缪撞击", "火焰一级", "缪飞天", "火焰二级"
+        };
+        private static readonly string[] ABILITY_LEVEL_NAMES_JP = {
+            "未習得", "バンプ", "ファイア", "フライ", "ファイア2"
+        };
+        private static readonly string[] ABILITY_NAMES_CN = { "缪撞击", "缪火焰", "缪飞天" };
+        private static readonly string[] ABILITY_NAMES_JP = { "ミュウバンプ", "ミュウファイア", "ミュウフライ" };
+
+        private string AbilityName(int i)
+        {
+            return LangText(ABILITY_NAMES_CN[i], ABILITY_NAMES_JP[i]);
+        }
+
+        private int AbilityVarOffset(int i)
+        {
+            return SaveOffsets.SCRIPT_VARS + (149 + i) * 8;
+        }
+
+        private int GetAbilityValue(int i)
+        {
+            if (_saveData == null) return 0;
+            int max = (i == 0) ? 2 : 1;
+            int v = (int)_saveData.ReadU32(AbilityVarOffset(i));
+            if (v < 0) v = 0;
+            if (v > max) v = max;
+            return v;
+        }
+
+        private void SetAbilityValue(int i, int v)
+        {
+            _saveData.WriteU32(AbilityVarOffset(i), (uint)v);
+        }
+
+        private int GetAbilityLevel()
+        {
+            int f = GetAbilityValue(0), b = GetAbilityValue(1), y = GetAbilityValue(2);
+            for (int lv = ABILITY_LEVELS.Length - 1; lv >= 0; lv--)
+            {
+                if (f >= ABILITY_LEVELS[lv][0] && b >= ABILITY_LEVELS[lv][1] && y >= ABILITY_LEVELS[lv][2])
+                    return lv;
+            }
+            return 0;
+        }
+
+        private void SetAbilityLevel(int lv)
+        {
+            SetAbilityValue(0, ABILITY_LEVELS[lv][0]);
+            SetAbilityValue(1, ABILITY_LEVELS[lv][1]);
+            SetAbilityValue(2, ABILITY_LEVELS[lv][2]);
+        }
+
+        /// <summary>刷新缪能力显示（按游戏判定：撞击=任意var>0；火焰=撞击/飞行解锁后看var149等级；飞天=var151>0）。</summary>
+        private void RefreshAbilityStatus()
+        {
+            if (lblAbilityItems == null) return;
+            bool hasSave = _saveData != null && _saveData.Type == SaveType.ToaXxx;
+            int fire = GetAbilityValue(0);  // var149 火焰等级
+            int bump = GetAbilityValue(1);  // var150 撞击
+            int fly = GetAbilityValue(2);   // var151 飞天
+
+            for (int i = 0; i < 3; i++)
+            {
+                string st;
+                if (!hasSave)
+                    st = LangText("未加载", "未読込");
+                else if (i == 0)  // 缪撞击 = 任意 var>0
+                {
+                    bool ok = fire > 0 || bump > 0 || fly > 0;
+                    st = LangText(ok ? "已习得" : "未习得", ok ? "習得済" : "未習得");
+                }
+                else if (i == 1)  // 缪火焰 = 撞击/飞行解锁后，等级看 var149
+                {
+                    bool unlocked = bump > 0 || fly > 0;
+                    st = !unlocked
+                        ? LangText("未习得", "未習得")
+                        : (fire >= 2 ? LangText("火焰二级", "ファイア2") : LangText("火焰一级", "ファイア"));
+                }
+                else  // 缪飞天 = var151>0
+                {
+                    bool ok = fly > 0;
+                    st = LangText(ok ? "已习得" : "未习得", ok ? "習得済" : "未習得");
+                }
+                lblAbilityItems[i].Text = string.Format("{0}：{1}", AbilityName(i), st);
+            }
+        }
+
+        /// <summary>双击缪能力标签：按 5 档循环切换（未习得→缪撞击→火焰一级→缪飞天→火焰二级→未习得）。</summary>
+        private void lblAbility_DoubleClick(object sender, EventArgs e)
+        {
+            if (_saveData == null || _saveData.Type != SaveType.ToaXxx) return;
+            var lbl = sender as Label;
+            if (lbl == null) return;
+
+            int lv = GetAbilityLevel();
+            int nlv = (lv + 1) % ABILITY_LEVELS.Length;
+            SetAbilityLevel(nlv);
+
+            ChecksumHelper.FixToaChecksum(_saveData.Buffer);
+            RefreshAbilityStatus();
+            RefreshSideDoneStatus();
+
+            string state = LangText(ABILITY_LEVEL_NAMES_CN[nlv], ABILITY_LEVEL_NAMES_JP[nlv]);
+            statusLabel.Text = string.Format(LangText("缪能力：{0}", "ミュウ能力：{0}"), state);
+        }
+
+        /// <summary>支线完成状态：按任务级完成标志统计（complete_flag 非 0 的任务中，已完成数）。</summary>
+        private void RefreshSideDoneStatus()
+        {
+            if (_saveData == null || _saveData.Type != SaveType.ToaXxx)
+            {
+                if (lblSideDoneStatus != null)
+                    lblSideDoneStatus.Text = LangText("支线任务完成情况：(未加载)", "サブクエスト完了：(未読み込み)");
+                if (lstQuestSummary != null) lstQuestSummary.Items.Clear();
+                return;
+            }
+            int done = 0, tracked = 0;
+            foreach (int pg in SideQuestJumpDatabase.GetPages())
+            {
+                var entries = SideQuestJumpDatabase.GetEntries(pg);
+                if (entries == null) continue;
+                foreach (var ent in entries)
+                {
+                    if (ent.complete_flag <= 0) continue;
+                    tracked++;
+                    if (IsFlagSet(ent.complete_flag)) done++;
+                }
+            }
+            lblSideDoneStatus.Text = string.Format(
+                LangText("支线任务完成情况：{0} / {1} 个已达成（★=有完成标志的任务；其余任务无独立完成标志）",
+                    "サブクエスト完了：{0} / {1}（★=完了フラグありのタスク）"),
+                done, tracked);
+            PopulateSideQuestList();
+            PopulateQuestSummary();
+        }
+
+        /// <summary>聚合完成度：按 quest 名聚合多步任务（n/m），显示已完成里程碑数/总数。</summary>
+        private void PopulateQuestSummary()
+        {
+            if (lstQuestSummary == null) return;
+            lstQuestSummary.Items.Clear();
+            bool hasSave = _saveData != null && _saveData.Type == SaveType.ToaXxx;
+
+            // quest_name -> 去重 complete_flag 列表
+            var questFlags = new Dictionary<string, List<int>>();
+            foreach (int pg in SideQuestJumpDatabase.GetPages())
+            {
+                var entries = SideQuestJumpDatabase.GetEntries(pg);
+                if (entries == null) continue;
+                foreach (var ent in entries)
+                {
+                    if (ent.quest_total <= 1 || ent.complete_flag <= 0) continue;
+                    if (!questFlags.ContainsKey(ent.quest_name))
+                        questFlags[ent.quest_name] = new List<int>();
+                    if (!questFlags[ent.quest_name].Contains(ent.complete_flag))
+                        questFlags[ent.quest_name].Add(ent.complete_flag);
+                }
+            }
+
+            foreach (var kv in questFlags.OrderBy(k => k.Key))
+            {
+                int total = kv.Value.Count;
+                if (total == 0) continue;  // 无独立完成标志的 quest 不显示
+                int done = 0;
+                if (hasSave)
+                    foreach (int f in kv.Value)
+                        if (IsFlagSet(f)) done++;
+                string bar = done >= total ? "✔" : (done > 0 ? "◐" : "✘");
+                lstQuestSummary.Items.Add(string.Format("{0} {1}（{2}/{3}）", bar, kv.Key, done, total));
+            }
+        }
+
+        /// <summary>批量设置/清除所有支线任务的完成标志。</summary>
+        private void SetAllSideComplete(bool set)
+        {
+            if (_saveData == null || _saveData.Type != SaveType.ToaXxx) return;
+            foreach (int pg in SideQuestJumpDatabase.GetPages())
+            {
+                var entries = SideQuestJumpDatabase.GetEntries(pg);
+                if (entries == null) continue;
+                foreach (var ent in entries)
+                    if (ent.complete_flag > 0)
+                        SetStoryFlag(ent.complete_flag, set);
+            }
+            ChecksumHelper.FixToaChecksum(_saveData.Buffer);
+            RefreshSideDoneStatus();
+            statusLabel.Text = set
+                ? LangText("已全部完成所有支线任务", "すべてのサブクエストを完了にしました")
+                : LangText("已重置所有支线任务", "すべてのサブクエストをリセットしました");
+        }
+
+        private void btnSideAllDone_Click(object sender, EventArgs e)
+        {
+            SetAllSideComplete(true);
+        }
+
+        private void btnSideAllReset_Click(object sender, EventArgs e)
+        {
+            SetAllSideComplete(false);
+        }
+
+        private List<StoryJumpDatabase.JumpEntry> _currentChapterEntries = new List<StoryJumpDatabase.JumpEntry>();
+        private List<StoryJumpDatabase.JumpEntry> _currentStoryEntries = new List<StoryJumpDatabase.JumpEntry>();
+
+        private void cmbStoryChapter_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            _currentChapterEntries.Clear();
+            int idx = cmbStoryChapter.SelectedIndex;
+            if (idx >= 0)
+            {
+                var chapters = new List<int>(StoryJumpDatabase.GetChapters());
+                if (idx < chapters.Count)
+                {
+                    var ch = StoryJumpDatabase.GetChapter(chapters[idx]);
+                    if (ch != null)
+                        foreach (var item in ch.items)
+                            if (!string.IsNullOrEmpty(item.menu_name))
+                                _currentChapterEntries.Add(item);
+                }
+            }
+            PopulateStoryBranches();
+        }
+
+        private void PopulateStoryBranches()
+        {
+            lstStoryBranches.Items.Clear();
+            _currentStoryEntries.Clear();
+            _selectedJumpEntry = null;
+            btnStoryJump.Enabled = false;
+            btnStoryJumpNoEvent.Enabled = false;
+            lblStoryTargetInfo.Text = "";
+
+            string kw = txtStorySearch != null ? txtStorySearch.Text.Trim() : "";
+            if (kw.Length == 0)
+            {
+                // 无搜索词：显示当前章节分支
+                foreach (var item in _currentChapterEntries)
+                {
+                    _currentStoryEntries.Add(item);
+                    lstStoryBranches.Items.Add(item.menu_name);
+                }
+            }
+            else
+            {
+                // 全局搜索：跨所有章节
+                foreach (int chNum in StoryJumpDatabase.GetChapters())
+                {
+                    var ch = StoryJumpDatabase.GetChapter(chNum);
+                    if (ch == null) continue;
+                    foreach (var item in ch.items)
+                    {
+                        if (string.IsNullOrEmpty(item.menu_name)) continue;
+                        if (item.menu_name.IndexOf(kw, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                        _currentStoryEntries.Add(item);
+                        lstStoryBranches.Items.Add(string.Format("【{0}】{1}", ch.chapter_name, item.menu_name));
+                    }
+                }
+            }
+        }
+
+        private void txtStorySearch_TextChanged(object sender, EventArgs e)
+        {
+            PopulateStoryBranches();
+        }
+
+        private void lstStoryBranches_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            int idx = lstStoryBranches.SelectedIndex;
+            if (idx < 0 || idx >= _currentStoryEntries.Count)
+            {
+                _selectedJumpEntry = null;
+                btnStoryJump.Enabled = false;
+                btnStoryJumpNoEvent.Enabled = false;
+                lblStoryTargetInfo.Text = "";
+                return;
+            }
+            _selectedJumpEntry = _currentStoryEntries[idx];
+
+            bool hasJumpData = (_selectedJumpEntry.map_id != 0 || _selectedJumpEntry.event_id != 0)
+                && _selectedJumpEntry.map_id < 650;  // >=8000 为场景事件ID（运行时触发，无法用存档地图ID跳转）
+            bool isSceneEvent = _selectedJumpEntry.map_id >= 8000;
+            btnStoryJump.Enabled = hasJumpData;
+            btnStoryJumpNoEvent.Enabled = hasJumpData;
+
+            if (!hasJumpData)
+            {
+                if (isSceneEvent)
+                {
+                    lblStoryTargetInfo.Text = _selectedJumpEntry.menu_name + "\n\n" +
+                        LangText("（场景事件，需运行时触发，无法用存档跳转）", "（シーンイベント、ランタイム専用）");
+                }
+                else
+                {
+                    lblStoryTargetInfo.Text = _selectedJumpEntry.menu_name + "\n\n" +
+                        LangText("（此分支无跳转数据）", "（このシーンにジャンプデータなし）");
+                }
+                return;
+            }
+
+            string mapName = _selectedJumpEntry.map_name;
+            if (string.IsNullOrEmpty(mapName))
+                mapName = StoryJumpDatabase.GetMapName(_selectedJumpEntry.map_id);
+            string eventDesc = _selectedJumpEntry.event_id == 0
+                ? LangText("无事件（自定义画面）", "イベントなし")
+                : StoryJumpDatabase.GetEventDescription(_selectedJumpEntry.event_id);
+
+            bool hasCoord = _selectedJumpEntry.x != 0 || _selectedJumpEntry.y != 0
+                || _selectedJumpEntry.z != 0 || _selectedJumpEntry.angle != 0;
+            string coordText = hasCoord
+                ? string.Format(LangText("坐标 X={0} Y={1} Z={2} 朝向={3}°", "座標 X={0} Y={1} Z={2} 向き={3}°"),
+                    _selectedJumpEntry.x, _selectedJumpEntry.y, _selectedJumpEntry.z, _selectedJumpEntry.angle)
+                : LangText("坐标：地图默认出生点", "座標：マップ初期位置");
+
+            lblStoryTargetInfo.Text = string.Format(
+                "{0}\n\n{1}: {2} ({3})\n{4}: {5} ({6})\n{7}",
+                _selectedJumpEntry.menu_name,
+                LangText("目标地图", "目標マップ"), mapName, _selectedJumpEntry.map_id,
+                LangText("目标事件", "目標イベント"), eventDesc, _selectedJumpEntry.event_id,
+                coordText);
+        }
+
+        private void btnStoryJump_Click(object sender, EventArgs e)
+        {
+            if (_saveData == null || _saveData.Type != SaveType.ToaXxx) return;
+            if (_selectedJumpEntry == null) return;
+
+            ExecuteStoryJump(_selectedJumpEntry.map_id, _selectedJumpEntry.event_id, true,
+                _selectedJumpEntry.x, _selectedJumpEntry.y, _selectedJumpEntry.z, _selectedJumpEntry.angle,
+                _selectedJumpEntry.set_flags, _selectedJumpEntry.clear_flags);
+        }
+
+        private void btnStoryJumpNoEvent_Click(object sender, EventArgs e)
+        {
+            if (_saveData == null || _saveData.Type != SaveType.ToaXxx) return;
+            if (_selectedJumpEntry == null) return;
+
+            ExecuteStoryJump(_selectedJumpEntry.map_id, 0, false,
+                _selectedJumpEntry.x, _selectedJumpEntry.y, _selectedJumpEntry.z, _selectedJumpEntry.angle,
+                _selectedJumpEntry.set_flags, _selectedJumpEntry.clear_flags);
+        }
+
+        private void ExecuteStoryJump(uint mapId, uint eventId, bool writeEvent, float x, float y, float z, float angle,
+            System.Collections.Generic.List<int> setFlags, System.Collections.Generic.List<int> clearFlags)
+        {
+            try
+            {
+                _loading = true;
+
+                // 写地图ID
+                _saveData.WriteU32(SaveOffsets.BODY_MAP_ID, mapId);
+
+                // 写坐标（入口点编号转 float，与 MapWarp 命令一致）
+                // fallback 条件 = X==0 且 Z==0 时才用默认 X=0.01/Z=0.02（反汇编 sub_1A149C:
+                //   VCMP X,0; VLDREQ Z; VCMPEQ Z,0 → 仅当 X 和 Z 都为 0 才 fallback，缺一不可）
+                float fx = x;
+                float fz = z;
+                if (fx == 0.0f && fz == 0.0f)
+                {
+                    fx = 0.01f;
+                    fz = 0.02f;
+                }
+                _saveData.WriteFloat(SaveOffsets.BODY_PLAYER_X, fx);
+                _saveData.WriteFloat(SaveOffsets.BODY_PLAYER_Y, y);
+                _saveData.WriteFloat(SaveOffsets.BODY_PLAYER_Z, fz);
+                _saveData.WriteFloat(SaveOffsets.BODY_PLAYER_ANGLE, angle);
+
+                // 写事件ID（关键：触发对应剧情脚本）
+                if (writeEvent)
+                {
+                    _saveData.WriteU32(SaveOffsets.BODY_EVENT_ID, eventId);
+                }
+
+                // 写剧情 flag（SET_FLAG/CLEAR_FLAG，关键：部分分支依赖 flag 区分支线/状态）
+                // flag N 存储在 file FLAG_BITMAP(0x218) + N/8 的 bit(N%8)
+                if (setFlags != null)
+                    foreach (int f in setFlags) SetStoryFlag(f, true);
+                if (clearFlags != null)
+                    foreach (int f in clearFlags) SetStoryFlag(f, false);
+
+                // 重算双校验和
+                ChecksumHelper.FixToaChecksum(_saveData.Buffer);
+
+                _loading = false;
+                RefreshStoryJumpTab();
+
+                string mode = writeEvent
+                    ? LangText("地图+事件", "マップ+イベント")
+                    : LangText("仅地图", "マップのみ");
+                string mapName = StoryJumpDatabase.GetMapName(mapId);
+                statusLabel.Text = string.Format(LangText("已跳转: {0} -> {1} ({2})", "ジャンプ完了: {0} → {1} ({2})"),
+                    mode, mapName, mapId);
+            }
+            catch (Exception ex)
+            {
+                _loading = false;
+                System.Windows.Forms.MessageBox.Show(
+                    string.Format(LangText("跳转失败: {0}", "ジャンプ失敗: {0}"), ex.Message),
+                    LangText("错误", "エラー"),
+                    System.Windows.Forms.MessageBoxButtons.OK,
+                    System.Windows.Forms.MessageBoxIcon.Error);
+            }
+        }
+
+        /// <summary>设置/清除剧情 flag。flag N 位于 file FLAG_BITMAP(0x218) + N/8 字节的 bit(N%8)。越界 flag 号直接忽略。</summary>
+        private void SetStoryFlag(int flagNum, bool set)
+        {
+            if (flagNum < 0 || flagNum >= SaveOffsets.FLAG_BITMAP_SIZE * 8) return;
+            int off = SaveOffsets.FLAG_BITMAP + flagNum / 8;
+            int bit = flagNum % 8;
+            byte b = _saveData.Buffer[off];
+            if (set)
+                b = (byte)(b | (1 << bit));
+            else
+                b = (byte)(b & ~(1 << bit));
+            _saveData.Buffer[off] = b;
+        }
+
+        #region 支线跳跃标签页
+
+        private SideQuestJumpDatabase.SideEntry _selectedSideEntry;
+        private List<SideQuestJumpDatabase.SideEntry> _sideEntriesForCurrentPage = new List<SideQuestJumpDatabase.SideEntry>();
+
+        /// <summary>读取剧情 flag。flag N 位于 file FLAG_BITMAP(0x218) + N/8 字节的 bit(N%8)。越界返回 false。</summary>
+        private bool IsFlagSet(int flagNum)
+        {
+            if (_saveData == null || flagNum <= 0 || flagNum >= SaveOffsets.FLAG_BITMAP_SIZE * 8) return false;
+            return (_saveData.Buffer[SaveOffsets.FLAG_BITMAP + flagNum / 8] & (1 << (flagNum % 8))) != 0;
+        }
+
+        /// <summary>当前任务的完成状态文字。</summary>
+        private string SideEntryStatus(SideQuestJumpDatabase.SideEntry ent)
+        {
+            if (ent.complete_flag <= 0)
+                return LangText("—", "—");
+            if (_saveData == null || _saveData.Type != SaveType.ToaXxx)
+                return LangText("未加载", "未読込");
+            return IsFlagSet(ent.complete_flag)
+                ? LangText("已完成", "完了")
+                : LangText("未完成", "未完了");
+        }
+
+        private void PopulateSideQuestList()
+        {
+            lstSideQuests.Items.Clear();
+            _sideEntriesForCurrentPage.Clear();
+            _selectedSideEntry = null;
+            btnSideJump.Enabled = false;
+            btnSideToggleComplete.Enabled = false;
+            lblSideTargetInfo.Text = "";
+
+            string kw = txtSideSearch != null ? txtSideSearch.Text.Trim() : "";
+            bool hasSave = _saveData != null && _saveData.Type == SaveType.ToaXxx;
+
+            // 构建 (页前缀, entry) 显示列表
+            var show = new List<KeyValuePair<string, SideQuestJumpDatabase.SideEntry>>();
+            if (kw.Length == 0)
+            {
+                // 无搜索词：显示当前页
+                int idx = cmbSidePage.SelectedIndex;
+                if (idx < 0) return;
+                var pages = new List<int>(SideQuestJumpDatabase.GetPages());
+                if (idx >= pages.Count) return;
+                var entries = SideQuestJumpDatabase.GetEntries(pages[idx]);
+                if (entries == null) return;
+                foreach (var ent in entries)
+                    show.Add(new KeyValuePair<string, SideQuestJumpDatabase.SideEntry>("", ent));
+            }
+            else
+            {
+                // 全局搜索：跨所有页
+                foreach (int pg in SideQuestJumpDatabase.GetPages())
+                {
+                    var entries = SideQuestJumpDatabase.GetEntries(pg);
+                    if (entries == null) continue;
+                    foreach (var ent in entries)
+                        if (ent.name.IndexOf(kw, StringComparison.OrdinalIgnoreCase) >= 0)
+                            show.Add(new KeyValuePair<string, SideQuestJumpDatabase.SideEntry>(
+                                string.Format(LangText("第{0}页 ", "第{0}ページ "), pg), ent));
+                }
+            }
+
+            foreach (var kv in show)
+            {
+                var ent = kv.Value;
+                _sideEntriesForCurrentPage.Add(ent);
+                string marker, status;
+                if (ent.complete_flag <= 0) { marker = "· "; status = LangText("—", "—"); }
+                else if (!hasSave) { marker = "· "; status = LangText("未加载", "未読込"); }
+                else if (IsFlagSet(ent.complete_flag)) { marker = "✔ "; status = LangText("已完成", "完了"); }
+                else { marker = "✘ "; status = LangText("未完成", "未完了"); }
+                lstSideQuests.Items.Add(string.Format("{0}{1}{2}　[{3}]", marker, kv.Key, ent.name, status));
+            }
+        }
+
+        private void cmbSidePage_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            PopulateSideQuestList();
+        }
+
+        private void txtSideSearch_TextChanged(object sender, EventArgs e)
+        {
+            PopulateSideQuestList();
+        }
+
+        private void lstSideQuests_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            int idx = lstSideQuests.SelectedIndex;
+            if (idx < 0 || idx >= _sideEntriesForCurrentPage.Count)
+            {
+                _selectedSideEntry = null;
+                btnSideJump.Enabled = false;
+                btnSideToggleComplete.Enabled = false;
+                lblSideTargetInfo.Text = "";
+                return;
+            }
+            _selectedSideEntry = _sideEntriesForCurrentPage[idx];
+            btnSideJump.Enabled = true;
+            btnSideToggleComplete.Enabled = _selectedSideEntry.complete_flag > 0;
+
+            string mapName = StoryJumpDatabase.GetMapName(_selectedSideEntry.map_id);
+            string evtDesc = StoryJumpDatabase.GetEventDescription(_selectedSideEntry.event_id);
+            string status = SideEntryStatus(_selectedSideEntry);
+            lblSideTargetInfo.Text = string.Format(
+                LangText("任务：{0}\n状态：{1}\n事件：{2} ({3})\n地图：{4} ({5})\n坐标：X={6} Y={7} Z={8} 朝向={9}\nSET flag：{10}\nCLR flag：{11}",
+                    "タスク：{0}\n状態：{1}\nイベント：{2} ({3})\nマップ：{4} ({5})\n座標：X={6} Y={7} Z={8} 向き={9}\nSET flag：{10}\nCLR flag：{11}"),
+                _selectedSideEntry.name, status, evtDesc, _selectedSideEntry.event_id, mapName, _selectedSideEntry.map_id,
+                _selectedSideEntry.x, _selectedSideEntry.y, _selectedSideEntry.z, _selectedSideEntry.angle,
+                string.Join(",", _selectedSideEntry.set_flags), string.Join(",", _selectedSideEntry.clear_flags));
+        }
+
+        private void btnSideJump_Click(object sender, EventArgs e)
+        {
+            if (_saveData == null || _saveData.Type != SaveType.ToaXxx) return;
+            if (_selectedSideEntry == null) return;
+
+            ExecuteStoryJump(_selectedSideEntry.map_id, _selectedSideEntry.event_id, true,
+                _selectedSideEntry.x, _selectedSideEntry.y, _selectedSideEntry.z, _selectedSideEntry.angle,
+                _selectedSideEntry.set_flags, _selectedSideEntry.clear_flags);
+        }
+
+        /// <summary>切换所选支线任务的完成状态（set/clear complete_flag）。</summary>
+        private void ToggleSideComplete()
+        {
+            if (_saveData == null || _saveData.Type != SaveType.ToaXxx) return;
+            if (_selectedSideEntry == null) return;
+            int flag = _selectedSideEntry.complete_flag;
+            if (flag <= 0)
+            {
+                statusLabel.Text = LangText("该任务无独立完成标志，无法切换", "このタスクは個別完了フラグなし");
+                return;
+            }
+            bool cur = IsFlagSet(flag);
+            SetStoryFlag(flag, !cur);
+            ChecksumHelper.FixToaChecksum(_saveData.Buffer);
+            int sel = lstSideQuests.SelectedIndex;
+            RefreshSideDoneStatus();
+            if (sel >= 0 && sel < lstSideQuests.Items.Count)
+            {
+                lstSideQuests.SelectedIndex = sel;
+            }
+            statusLabel.Text = string.Format(LangText("「{0}」→ {1}", "「{0}」→ {1}"),
+                _selectedSideEntry.name,
+                !cur ? LangText("已完成", "完了") : LangText("未完成", "未完了"));
+        }
+
+        private void btnSideToggleComplete_Click(object sender, EventArgs e)
+        {
+            ToggleSideComplete();
+        }
+
+        private void lstSideQuests_DoubleClick(object sender, EventArgs e)
+        {
+            ToggleSideComplete();
+        }
+
+        #endregion
+
+        #endregion
     }
 }

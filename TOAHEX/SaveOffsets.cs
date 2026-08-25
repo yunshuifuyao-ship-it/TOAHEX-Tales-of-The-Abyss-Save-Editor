@@ -175,15 +175,37 @@ namespace TOAHEX
         // 进赌场时被此值重算覆盖。守恒式 0xABA4/100 + 筹码×10 = 战斗Grade - 商店已花费。
         public const int BODY_GRADE_CASINO = 0xABA4;
 
+        // 每角色杀敌数（影响魔武器攻击力；IDA sub_199418 敌人被击杀时 +1，clamp 999999=0xF423F）。
+        // 击杀时同时更新两处：off_4F0500+8540 区（→TOA_XXX）与 TOASYS_RuntimeBlock（→TOASYS）。
+        // 角色 ID 1-7：1=卢克 2=缇娅 3=杰德 4=阿妮丝 5=凯 6=娜塔莉亚 7=阿修。
+        public const int BODY_CHAR_KILLS = 0x230C;     // TOA_XXX：0x230C + 4*(角色ID-1)，当前周目杀敌数
+        public const int TOASYS_CHAR_KILLS = 0x8C;     // TOASYS：0x8C + 4*(角色ID-1)，跨周目累计杀敌数
+        public const int CHAR_KILL_COUNT = 7;
+
         // 脚本变量区（file 0x2BA1 起 32KB=4095 个 8 字节条目 [tag u32][value u32]，sub_34ACB4 分配 dword_53A3B8）。
         // 赌场实测（2026-08-19，用户以 10Grade↔1筹码 兑换制造差分，五档验证）：
         //   var#271 = 赌场筹码（游戏内赌场菜单显示的持有数）
         //   var#773 = 赌场 Grade 余额（游戏内赌场显示的 Grade；兑换只扣此变量，0xB080/0xB088 不变）
         //   var#774 = 兑换相关计数器（语义未完全确认，只读展示）
-        public const int SCRIPT_VARS = 0x2BA1;
+        public const int SCRIPT_VARS = 0x2BA5;  // 修正：实际起始 0x2BA5（LoadToaSaveBuffer body+10637），非 0x2BA1
         public const int SCRIPT_VAR_CHIPS = 271;
         public const int SCRIPT_VAR_GRADE = 773;
         public const int SCRIPT_VAR_EXCHANGE = 774;
+
+        // 剧情跳跃字段（IDA + SB7 脚本VM逆向 + 实机4档验证 2026-08-25）
+        public const int BODY_MAP_ID = 0x528;              // u32 当前地图ID（0-649, maptable.mbt 索引）
+        public const int BODY_MAP_TRANSITION_COUNT = 0x52C; // u32 地图切换计数（维护性，可不改）
+        public const int BODY_PLAYER_X = 0x530;            // f32 玩家X坐标
+        public const int BODY_PLAYER_Y = 0x534;            // f32 玩家Y坐标
+        public const int BODY_PLAYER_Z = 0x538;            // f32 玩家Z坐标
+        public const int BODY_PLAYER_ANGLE = 0x53C;        // f32 朝向角（度）
+        // 脚本变量 var[136] = 当前事件ID（event_id），格式 XCCYYY0（X=篇1-4,CC=章节,YYY=事件序,末位0）
+        // 游戏读档后 sub_2EB174(event_id) 调度执行对应剧情脚本
+        public const int SCRIPT_VAR_EVENT_ID = 136;        // var 索引
+        public const int BODY_EVENT_ID = 0x2FE5;           // u32 event_id（= SCRIPT_VARS + 136*8 的 tag 字段）
+        // 全局 flag 位图（off_4F0500+116，file 0x218 起）
+        public const int FLAG_BITMAP = 0x218;              // 位图基址，flag N = [N/8] 的 bit(N%8)
+        public const int FLAG_BITMAP_SIZE = 768;           // 0x218~0x518，共 flag 0~6143
 
         // TOASYS 布局（sub_37D584 保存 / sub_3A9840 加载；数据区 = 运行时结构 unk_53C924 镜像）
         // 2026-08-19 双存档 diff + 用户记录交叉验证 + IDA（sub_333800 菜单构建/sub_199xxx 统计API族）定案：
