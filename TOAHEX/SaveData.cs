@@ -12,15 +12,23 @@ namespace TOAHEX
         Toasys
     }
 
+    public enum Platform
+    {
+        N3ds,
+        Ps2
+    }
+
     public class SaveData
     {
         private byte[] _buffer;
         private string _filePath;
         private SaveType _saveType;
+        private Platform _platform = Platform.N3ds;
 
         public byte[] Buffer => _buffer;
         public string FilePath => _filePath;
         public SaveType Type => _saveType;
+        public Platform Platform { get { return _platform; } }
         public bool IsLoaded => _buffer != null;
 
         public float Version
@@ -108,6 +116,107 @@ namespace TOAHEX
             get => ReadU32(SaveOffsets.HEAD_PARTY_COUNT);
         }
 
+        /// <summary>
+        /// 日记全开：BOOK_SUB(0xBAD0) 前 114 字节全部置 0xFF（日记菜单按此值枚举每条
+        /// 日记可见的文本页数，0xFF=全部显示；见 SaveOffsets.DIARY_ENTRY_FLAGS 注释）。
+        /// </summary>
+        public void UnlockAllDiaryEntries()
+        {
+            for (int i = 0; i < SaveOffsets.DIARY_ENTRY_COUNT; i++)
+                WriteU8(SaveOffsets.DIARY_ENTRY_FLAGS + i, 0xFF);
+        }
+
+        /// <summary>
+        /// 日记全开联动：把 DIARY_MARK_VARS 列出的脚本变量 type 字段高 16 位置为 0x3F80
+        /// （与 Example/TOA_000 参考档逐字节一致，type u32: 0x00000200→0x3F800200）。
+        /// 仅动 type=0x0200（有效 int）的变量，value 与其余字段保持不变。
+        /// 返回实际标记的变量数。
+        /// </summary>
+        public int MarkDiaryScriptVars()
+        {
+            int marked = 0;
+            foreach (int n in SaveOffsets.DIARY_MARK_VARS)
+            {
+                int entry = SaveOffsets.SCRIPT_VAR_ENTRY_BASE + 8 * n;
+                if (ReadU16(entry) != 0x0200) continue;
+                WriteU16(entry + 2, SaveOffsets.SCRIPT_VAR_MARK_HIGH);
+                marked++;
+            }
+            return marked;
+        }
+
+        /// <summary>
+        /// 地图全开：置位全局 flag 位图中的 flag 600-618 + 650-686（共 56 个，世界地图地名全开）。
+        /// flag 619-649 非地图数据，保持原样。返回本次新置位的 flag 数。
+        /// </summary>
+        public int UnlockAllMaps()
+        {
+            int set = 0;
+            set += SetFlagRange(SaveOffsets.MAP_UNLOCK_FLAG_RANGES_LO1, SaveOffsets.MAP_UNLOCK_FLAG_RANGES_HI1);
+            set += SetFlagRange(SaveOffsets.MAP_UNLOCK_FLAG_RANGES_LO2, SaveOffsets.MAP_UNLOCK_FLAG_RANGES_HI2);
+            return set;
+        }
+
+        /// <summary>读取全局 flag N（0x218 位图，flag 0~6143）。PS2 存档经 MapOffset 自动同位映射。</summary>
+        public bool ReadGlobalFlag(int flag)
+        {
+            if (flag < 0 || flag >= SaveOffsets.FLAG_BITMAP_SIZE * 8) return false;
+            return ((ReadU8(SaveOffsets.FLAG_BITMAP + flag / 8) >> (flag % 8)) & 1) != 0;
+        }
+
+        /// <summary>写入全局 flag N（0x218 位图）。用于功能解锁（C·コア=2007、FSチャンバー=2009）等。</summary>
+        public void WriteGlobalFlag(int flag, bool on)
+        {
+            if (flag < 0 || flag >= SaveOffsets.FLAG_BITMAP_SIZE * 8) return;
+            int off = SaveOffsets.FLAG_BITMAP + flag / 8;
+            byte b = ReadU8(off);
+            byte nb = on ? (byte)(b | (1 << (flag % 8))) : (byte)(b & ~(1 << (flag % 8)));
+            if (nb != b) WriteU8(off, nb);
+        }
+
+        /// <summary>置位 flag 位图(0x218)中 [lo,hi] 闭区间的所有 flag，返回新置位数量（已置位的不计）。</summary>
+        private int SetFlagRange(int lo, int hi)
+        {
+            int set = 0;
+            for (int f = lo; f <= hi; f++)
+            {
+                if (f < 0 || f >= SaveOffsets.FLAG_BITMAP_SIZE * 8) continue;
+                int off = SaveOffsets.FLAG_BITMAP + f / 8;
+                int bit = f % 8;
+                byte b = ReadU8(off);
+                byte nb = (byte)(b | (1 << bit));
+                if (nb != b) { WriteU8(off, nb); set++; }
+            }
+            return set;
+        }
+
+        /// <summary>读取日记条目 i 的解锁值（0=锁定，0xFF=全开）。</summary>
+        public byte ReadDiaryEntry(int index)
+        {
+            if (index < 0 || index >= SaveOffsets.DIARY_ENTRY_COUNT) return 0;
+            return ReadU8(SaveOffsets.DIARY_ENTRY_FLAGS + index);
+        }
+
+        /// <summary>地图全开状态：56 个地图 flag 中已置位的数量。</summary>
+        public int CountMapUnlockFlags()
+        {
+            int cnt = 0;
+            cnt += CountFlagRange(SaveOffsets.MAP_UNLOCK_FLAG_RANGES_LO1, SaveOffsets.MAP_UNLOCK_FLAG_RANGES_HI1);
+            cnt += CountFlagRange(SaveOffsets.MAP_UNLOCK_FLAG_RANGES_LO2, SaveOffsets.MAP_UNLOCK_FLAG_RANGES_HI2);
+            return cnt;
+        }
+
+        private int CountFlagRange(int lo, int hi)
+        {
+            int cnt = 0;
+            for (int f = lo; f <= hi; f++)
+            {
+                if (f < 0 || f >= SaveOffsets.FLAG_BITMAP_SIZE * 8) continue;
+                if ((_buffer[SaveOffsets.FLAG_BITMAP + f / 8] & (1 << (f % 8))) != 0) cnt++;
+            }
+            return cnt;
+        }
+
         public uint ReadArteLearnedBitmap(int charIndex)
         {
             int baseOff = GetCharBaseOffset(charIndex);
@@ -127,6 +236,9 @@ namespace TOAHEX
         {
             get
             {
+                // PS2 存档地名始终为 Shift-JIS，不依赖 TBL 码表
+                if (_platform == Platform.Ps2)
+                    return ReadShiftJisString(SaveOffsets.HEAD_LOCATION_NAME, 32);
                 // 优先用汉化码表解码（Decode 内部处理 0x00 截断），码表未加载时回退 Shift-JIS
                 if (TblCodec.IsLoaded)
                     return TblCodec.Decode(ReadBytes(SaveOffsets.HEAD_LOCATION_NAME, 32));
@@ -134,11 +246,70 @@ namespace TOAHEX
             }
         }
 
-        /// <summary>读取角色名（charIndex 1-7，CHAR_NAME=0x04，16 字节，0x00 截断），优先码表解码</summary>
+        /// <summary>头部当前地图ID（0x34，Build sub_37C948 每次
+        /// 存档由 runtime+988 重写；读档/存档界面按它显示地图缩略信息）</summary>
+        public uint HeadMapId
+        {
+            get { return ReadU32(SaveOffsets.HEAD_MAP_ID); }
+            set { WriteU32(SaveOffsets.HEAD_MAP_ID, value); }
+        }
+
+        /// <summary>
+        /// 写入头部地名（0x4C，32 字节，0x00 补齐，TBL 编码——与游戏 Build sub_37C948 的
+        /// maptable 显示名 strcpy 行为一致）。编码失败或超长返回 false。
+        /// PS2 存档用 Shift-JIS(cp932) 编码，不依赖码表。
+        /// </summary>
+        public bool WriteLocationName(string name, out string error)
+        {
+            error = null;
+            if (_buffer == null || _saveType != SaveType.ToaXxx)
+            {
+                error = "仅支持 TOA_XXX 存档。";
+                return false;
+            }
+            if (_platform == Platform.Ps2)
+            {
+                byte[] ps2Encoded = Encoding.GetEncoding(932).GetBytes(name);
+                if (ps2Encoded.Length > 31)
+                {
+                    error = string.Format("地名编码后为 {0} 字节，超过 31 字节上限。", ps2Encoded.Length);
+                    return false;
+                }
+                byte[] ps2Buf = new byte[32];
+                System.Buffer.BlockCopy(ps2Encoded, 0, ps2Buf, 0, ps2Encoded.Length);
+                WriteBytes(SaveOffsets.HEAD_LOCATION_NAME, ps2Buf);
+                return true;
+            }
+            if (!TblCodec.IsLoaded)
+            {
+                error = "码表未加载（new_patched.tbl），无法编码地名。";
+                return false;
+            }
+            byte[] encoded = TblCodec.Encode(name, out List<string> invalidChars);
+            if (invalidChars.Count > 0)
+            {
+                error = "以下字符无法用码表编码：" + string.Join("、", invalidChars);
+                return false;
+            }
+            if (encoded.Length > 31)
+            {
+                error = string.Format("地名编码后为 {0} 字节，超过 31 字节上限。", encoded.Length);
+                return false;
+            }
+            byte[] buf = new byte[32];
+            System.Buffer.BlockCopy(encoded, 0, buf, 0, encoded.Length);
+            WriteBytes(SaveOffsets.HEAD_LOCATION_NAME, buf);
+            return true;
+        }
+
+        /// <summary>读取角色名（charIndex 1-7，CHAR_NAME=0x04，16 字节，0x00 截断），优先码表解码；
+        /// PS2 存档强制 Shift-JIS（即使码表已加载）</summary>
         public string ReadCharName(int charIndex)
         {
             int baseOff = GetCharBaseOffset(charIndex);
             if (baseOff == 0) return string.Empty;
+            if (_platform == Platform.Ps2)
+                return ReadShiftJisString(baseOff + SaveOffsets.CHAR_NAME, 16);
             if (TblCodec.IsLoaded)
                 return TblCodec.Decode(ReadBytes(baseOff + SaveOffsets.CHAR_NAME, 16));
             return ReadShiftJisString(baseOff + SaveOffsets.CHAR_NAME, 16);
@@ -166,6 +337,20 @@ namespace TOAHEX
             {
                 error = "无效的角色索引。";
                 return false;
+            }
+            if (_platform == Platform.Ps2)
+            {
+                // PS2：Shift-JIS(cp932) 编码，不依赖 TBL 码表
+                byte[] ps2Encoded = Encoding.GetEncoding(932).GetBytes(name);
+                if (ps2Encoded.Length > 15)
+                {
+                    error = string.Format("名称编码后为 {0} 字节，超过 15 字节上限。", ps2Encoded.Length);
+                    return false;
+                }
+                byte[] ps2Buf = new byte[16];
+                System.Buffer.BlockCopy(ps2Encoded, 0, ps2Buf, 0, ps2Encoded.Length);
+                WriteBytes(baseOff + SaveOffsets.CHAR_NAME, ps2Buf);
+                return true;
             }
             if (!TblCodec.IsLoaded)
             {
@@ -221,10 +406,22 @@ namespace TOAHEX
             if (size == SaveOffsets.TOA_XXX_SIZE)
             {
                 _saveType = SaveType.ToaXxx;
+                _platform = Platform.N3ds;
+            }
+            else if (size == SaveOffsets.PS2_TOA_XXX_SIZE)
+            {
+                _saveType = SaveType.ToaXxx;
+                _platform = Platform.Ps2;
             }
             else if (size == SaveOffsets.TOASYS_SIZE)
             {
                 _saveType = SaveType.Toasys;
+                _platform = Platform.N3ds;
+            }
+            else if (size == SaveOffsets.PS2_TOASYS_SIZE)
+            {
+                _saveType = SaveType.Toasys;
+                _platform = Platform.Ps2;
             }
             else
             {
@@ -264,11 +461,17 @@ namespace TOAHEX
                 // 保存前按游戏逻辑(sub_37C948)从 body 角色块重建 HEAD 摘要区(0x94)，
                 // 保证存档槽预览与编辑后的数据同步
                 RebuildHeadSummary();
-                ChecksumHelper.FixToaChecksum(_buffer);
+                if (_platform == Platform.Ps2)
+                    ChecksumHelper.FixPs2ToaChecksum(_buffer);
+                else
+                    ChecksumHelper.FixToaChecksum(_buffer);
             }
             else if (_saveType == SaveType.Toasys)
             {
-                ChecksumHelper.FixToasysChecksum(_buffer);
+                if (_platform == Platform.Ps2)
+                    ChecksumHelper.FixPs2ToasysChecksum(_buffer);
+                else
+                    ChecksumHelper.FixToasysChecksum(_buffer);
             }
 
             File.WriteAllBytes(target, _buffer);
@@ -280,86 +483,143 @@ namespace TOAHEX
             if (_buffer == null) return false;
 
             if (_saveType == SaveType.ToaXxx)
-                return ChecksumHelper.VerifyToaChecksum(_buffer);
+                return _platform == Platform.Ps2
+                    ? ChecksumHelper.VerifyPs2ToaChecksum(_buffer)
+                    : ChecksumHelper.VerifyToaChecksum(_buffer);
             if (_saveType == SaveType.Toasys)
-                return ChecksumHelper.VerifyToasysChecksum(_buffer);
+                return _platform == Platform.Ps2
+                    ? ChecksumHelper.VerifyPs2ToasysChecksum(_buffer)
+                    : ChecksumHelper.VerifyToasysChecksum(_buffer);
 
             return false;
         }
 
+        /// <summary>
+        /// 就地重算当前存档的校验和（不落盘，供 UI 编辑后继续修改）。
+        /// 按平台分发：PS2 主档/系统档与 3DS 的校验区域长度不同，混用会导致越界读或校验和错误。
+        /// </summary>
+        public void FixChecksum()
+        {
+            if (_buffer == null) return;
+
+            if (_saveType == SaveType.ToaXxx)
+            {
+                if (_platform == Platform.Ps2)
+                    ChecksumHelper.FixPs2ToaChecksum(_buffer);
+                else
+                    ChecksumHelper.FixToaChecksum(_buffer);
+            }
+            else if (_saveType == SaveType.Toasys)
+            {
+                if (_platform == Platform.Ps2)
+                    ChecksumHelper.FixPs2ToasysChecksum(_buffer);
+                else
+                    ChecksumHelper.FixToasysChecksum(_buffer);
+            }
+        }
+
+        /// <summary>
+        /// 偏移翻译：把公开 API 接受的 3DS 语义偏移翻译为当前平台文件的实际字节偏移。
+        /// N3ds 原样返回；PS2 主档按区间平移（同位区 / +4 / -24），3DS 专属常量区
+        /// (0xABCC-0xABF0) 无对应字节则抛异常；PS2 系统档 [0,1552) 同位、其后 -28。
+        /// 翻译只发生在本类私有原语内部，公开 API 绝不双重翻译。
+        /// </summary>
+        private int MapOffset(int offset)
+        {
+            if (_platform != Platform.Ps2) return offset;
+            if (_saveType == SaveType.Toasys)
+                return offset < SaveOffsets.SYS_MAP_IDENTITY_END ? offset : offset - 28;
+            if (offset < SaveOffsets.PS2_MAP_IDENTITY_END) return offset;
+            if (offset < SaveOffsets.PS2_MAP_PLUS4_END) return offset + 4;
+            if (offset < SaveOffsets.DS_ONLY_REGION_END)
+                throw new InvalidOperationException("3DS 专属区域(0xABCC-0xABF0)在 PS2 存档中无对应字节");
+            return offset - 24;
+        }
+
         public uint ReadU32(int offset)
         {
-            return BitConverter.ToUInt32(_buffer, offset);
+            int off = MapOffset(offset);
+            return BitConverter.ToUInt32(_buffer, off);
         }
 
         public void WriteU32(int offset, uint value)
         {
+            int off = MapOffset(offset);
             byte[] bytes = BitConverter.GetBytes(value);
-            System.Buffer.BlockCopy(bytes, 0, _buffer, offset, 4);
+            System.Buffer.BlockCopy(bytes, 0, _buffer, off, 4);
         }
 
         public ushort ReadU16(int offset)
         {
-            return BitConverter.ToUInt16(_buffer, offset);
+            int off = MapOffset(offset);
+            return BitConverter.ToUInt16(_buffer, off);
         }
 
         public void WriteU16(int offset, ushort value)
         {
+            int off = MapOffset(offset);
             byte[] bytes = BitConverter.GetBytes(value);
-            System.Buffer.BlockCopy(bytes, 0, _buffer, offset, 2);
+            System.Buffer.BlockCopy(bytes, 0, _buffer, off, 2);
         }
 
         public byte ReadU8(int offset)
         {
-            return _buffer[offset];
+            int off = MapOffset(offset);
+            return _buffer[off];
         }
 
         public void WriteU8(int offset, byte value)
         {
-            _buffer[offset] = value;
+            int off = MapOffset(offset);
+            _buffer[off] = value;
         }
 
-        public byte ReadByte(int offset) { return _buffer[offset]; }
-        public void WriteByte(int offset, byte value) { _buffer[offset] = value; }
+        public byte ReadByte(int offset) { int off = MapOffset(offset); return _buffer[off]; }
+        public void WriteByte(int offset, byte value) { int off = MapOffset(offset); _buffer[off] = value; }
 
         public float ReadFloat(int offset)
         {
-            return BitConverter.ToSingle(_buffer, offset);
+            int off = MapOffset(offset);
+            return BitConverter.ToSingle(_buffer, off);
         }
 
         public void WriteFloat(int offset, float value)
         {
+            int off = MapOffset(offset);
             byte[] bytes = BitConverter.GetBytes(value);
-            System.Buffer.BlockCopy(bytes, 0, _buffer, offset, 4);
+            System.Buffer.BlockCopy(bytes, 0, _buffer, off, 4);
         }
 
         public byte[] ReadBytes(int offset, int count)
         {
+            int off = MapOffset(offset);
             byte[] result = new byte[count];
-            System.Buffer.BlockCopy(_buffer, offset, result, 0, count);
+            System.Buffer.BlockCopy(_buffer, off, result, 0, count);
             return result;
         }
 
         public void WriteBytes(int offset, byte[] data)
         {
-            System.Buffer.BlockCopy(data, 0, _buffer, offset, data.Length);
+            int off = MapOffset(offset);
+            System.Buffer.BlockCopy(data, 0, _buffer, off, data.Length);
         }
 
         public string ReadShiftJisString(int offset, int maxLength)
         {
+            int off = MapOffset(offset);
             Encoding shiftJis = Encoding.GetEncoding(932);
             int nullIndex = -1;
-            for (int i = offset; i < offset + maxLength - 1; i++)
+            for (int i = off; i < off + maxLength - 1; i++)
             {
                 if (_buffer[i] == 0)
                 {
-                    nullIndex = i - offset;
+                    nullIndex = i - off;
                     break;
                 }
             }
             int count = nullIndex >= 0 ? nullIndex : maxLength;
             if (count == 0) return string.Empty;
-            return shiftJis.GetString(_buffer, offset, count);
+            return shiftJis.GetString(_buffer, off, count);
         }
 
         public int GetCharBaseOffset(int charIndex)
@@ -499,16 +759,14 @@ namespace TOAHEX
 
         public byte[] GetItemQuantities()
         {
-            byte[] quantities = new byte[SaveOffsets.BODY_ITEM_COUNT];
-            System.Buffer.BlockCopy(_buffer, SaveOffsets.BODY_ITEM_ARRAY, quantities, 0, SaveOffsets.BODY_ITEM_COUNT);
-            return quantities;
+            return ReadBytes(SaveOffsets.BODY_ITEM_ARRAY, SaveOffsets.BODY_ITEM_COUNT);
         }
 
         public void SetItemQuantity(int itemId, byte quantity)
         {
             if (itemId < 0 || itemId >= SaveOffsets.BODY_ITEM_COUNT) return;
             if (quantity > 99) quantity = 99;
-            _buffer[SaveOffsets.BODY_ITEM_ARRAY + itemId] = quantity;
+            WriteU8(SaveOffsets.BODY_ITEM_ARRAY + itemId, quantity);
         }
 
         public uint ReadLuckBase(int charIndex)

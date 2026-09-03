@@ -51,7 +51,6 @@ namespace TOAHEX
             menuFileOpen.Text = LangText("打开", "開く");
             menuFileSave.Text = LangText("保存", "保存");
             menuFileExit.Text = LangText("退出", "終了");
-            if (btnCharName != null) btnCharName.Text = LangText("更改角色名...", "キャラ名変更...");
             menuLanguage.Text = LangText("语言", "言語");
             menuLangCN.Text = LangText("中文", "中文");
             menuLangJP.Text = LangText("日文", "日本語");
@@ -59,6 +58,9 @@ namespace TOAHEX
             menuLangJP.Checked = LanguageConfig.Current == Language.JP;
             menuHelp.Text = LangText("帮助", "ヘルプ");
             menuHelpAbout.Text = LangText("关于", "バージョン情報");
+            menuTools.Text = LangText("工具", "ツール");
+            menuToolsCharName.Text = LangText("更改角色名…", "キャラ名変更…");
+            menuToolsConvertPs2.Text = LangText("PS2 → 3DS 存档转换…", "PS2 → 3DS セーブ変換…");
             statusLabel.Text = LangText("未加载存档", "セーブ未読み込み");
 
             tabGlobal.Text = LangText("全局数据", "全局データ");
@@ -242,7 +244,7 @@ namespace TOAHEX
             var data = new SaveData();
             if (!data.Load(filePath))
             {
-                MessageBox.Show(LangText("文件大小不匹配！\nTOA_XXX应为49120字节，TOASYS应为1860字节。", "ファイルサイズが一致しません！\nTOA_XXXは49120バイト、TOASYSは1860バイトである必要があります。"), LangText("错误", "エラー"), MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show(LangText("文件大小不匹配！\n3DS：TOA_XXX应为49120字节，TOASYS应为1860字节。\nPS2：主存档应为49096字节，系统存档应为1832字节。", "ファイルサイズが一致しません！\n3DS：TOA_XXXは49120バイト、TOASYSは1860バイト。\nPS2：メインは49096バイト、システムは1832バイト。"), LangText("错误", "エラー"), MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
 
@@ -355,6 +357,18 @@ namespace TOAHEX
         private void menuFileExit_Click(object sender, EventArgs e)
         {
             Close();
+        }
+
+        private void menuToolsConvertPs2_Click(object sender, EventArgs e)
+        {
+            string prefillMain = null, prefillSys = null;
+            if (_saveData != null && _saveData.IsLoaded && _saveData.Platform == Platform.Ps2)
+            {
+                if (_saveData.Type == SaveType.ToaXxx) prefillMain = _saveData.FilePath;
+                else if (_saveData.Type == SaveType.Toasys) prefillSys = _saveData.FilePath;
+            }
+            using (var form = new ConvertPs2Form(prefillMain, prefillSys, this.Icon))
+                form.ShowDialog(this);
         }
 
         private void menuEditCharName_Click(object sender, EventArgs e)
@@ -508,8 +522,11 @@ namespace TOAHEX
             }
 
             string type = _saveData.Type == SaveType.ToaXxx ? "TOA_XXX" : "TOASYS";
+            string platform = _saveData.Platform == Platform.Ps2
+                ? LangText("平台：PS2", "プラットフォーム：PS2")
+                : LangText("平台：3DS", "プラットフォーム：3DS");
             bool ok = _saveData.VerifyChecksum();
-            statusLabel.Text = $"{type} | {_saveData.FilePath} | {LangText("校验和", "チェックサム")}: {(ok ? LangText("通过", "OK") : LangText("失败", "NG"))}";
+            statusLabel.Text = $"{type} | {platform} | {_saveData.FilePath} | {LangText("校验和", "チェックサム")}: {(ok ? LangText("通过", "OK") : LangText("失败", "NG"))}";
             // 码表未加载时提示文本回退解码方式（已加载则保持克制不提示）
             if (!TblCodec.IsLoaded)
                 statusLabel.Text += LangText("（码表未加载，文本按Shift-JIS解码）", "（コード表未読込、テキストはShift-JISでデコード）");
@@ -552,9 +569,9 @@ namespace TOAHEX
 
                 try
                 {
-                    byte featureFlags = _saveData.ReadU8(SaveOffsets.BODY_FEATURE_FLAGS);
-                    chkCCore.Checked = (featureFlags & 0x01) != 0;
-                    chkFSChamber.Checked = (featureFlags & 0x02) != 0;
+                    // 功能解锁状态 = 全局 flag 位图教程完成 flag（2026-09-03 修正：旧 0x52C 是地图切换计数，写入无效）
+                    chkCCore.Checked = _saveData.ReadGlobalFlag(SaveOffsets.GLOBAL_FLAG_C_CORE);
+                    chkFSChamber.Checked = _saveData.ReadGlobalFlag(SaveOffsets.GLOBAL_FLAG_FS_CHAMBER);
                 }
                 catch { }
 
@@ -653,17 +670,15 @@ namespace TOAHEX
         private void chkCCore_CheckedChanged(object sender, EventArgs e)
         {
             if (_loading || _saveData == null) return;
-            byte flags = _saveData.ReadU8(SaveOffsets.BODY_FEATURE_FLAGS);
-            if (chkCCore.Checked) flags |= 0x01; else flags &= unchecked((byte)~0x01);
-            _saveData.WriteU8(SaveOffsets.BODY_FEATURE_FLAGS, flags);
+            // C·コア(响律符)解锁 = 全局 flag 2007（"新手教程 CC符"完成标志）
+            _saveData.WriteGlobalFlag(SaveOffsets.GLOBAL_FLAG_C_CORE, chkCCore.Checked);
         }
 
         private void chkFSChamber_CheckedChanged(object sender, EventArgs e)
         {
             if (_loading || _saveData == null) return;
-            byte flags = _saveData.ReadU8(SaveOffsets.BODY_FEATURE_FLAGS);
-            if (chkFSChamber.Checked) flags |= 0x02; else flags &= unchecked((byte)~0x02);
-            _saveData.WriteU8(SaveOffsets.BODY_FEATURE_FLAGS, flags);
+            // FSチャンバー(音素质点嵌石)解锁 = 全局 flag 2009（"新手教程 FS嵌石"完成标志）
+            _saveData.WriteGlobalFlag(SaveOffsets.GLOBAL_FLAG_FS_CHAMBER, chkFSChamber.Checked);
         }
 
         private void btnJournalAll_Click(object sender, EventArgs e)
@@ -672,14 +687,48 @@ namespace TOAHEX
 
             try
             {
-                byte[] fill = new byte[SaveOffsets.JOURNAL_FLAGS_SIZE];
-                for (int i = 0; i < fill.Length; i++) fill[i] = 0xFF;
-                _saveData.WriteBytes(SaveOffsets.JOURNAL_FLAGS_OFFSET, fill);
-                MessageBox.Show(LangText("日志已全开。", "Journalを全開放しました。"), LangText("提示", "情報"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+                // 1) 日记条目解锁表：BOOK_SUB(file 0xBAD0) 前 114 字节全 0xFF（2026-08-28 修正：
+                //    日记菜单 sub_2DE8CC/sub_2D6488 按 BOOK_SUB[i] 枚举第 i 条日记可见页数，
+                //    0xFF=全部显示。与 Example/TOA_000"只日记全开"参考档逐字节一致。
+                //    注意：聊天位图(0x418)不属于日记（参考档未动它），且置位后已看聊天不再触发，勿写。
+                _saveData.UnlockAllDiaryEntries();
+
+                // 2) 联动脚本变量 type 标记（var 154-269/338-340/563/621 高16位→0x3F80，
+                //    同样与参考档逐字节一致）。
+                int marked = _saveData.MarkDiaryScriptVars();
+
+                MessageBox.Show(
+                    LangText(
+                        string.Format("日记已全开（114 条 + 变量标记 {0} 项），不影响剧情进度。", marked),
+                        string.Format("日記を全開放しました（114条＋変数マーク{0}件）。ストーリー進行には影響しません。", marked)),
+                    LangText("提示", "情報"), MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
             {
                 MessageBox.Show(string.Format(LangText("日志全开失败：\n{0}", "Journal全開放失敗：\n{0}"), ex.Message), LangText("错误", "エラー"), MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void btnMapAll_Click(object sender, EventArgs e)
+        {
+            if (_saveData == null || _saveData.Type != SaveType.ToaXxx) return;
+
+            try
+            {
+                // 地图全开 = 全局 flag 位图(0x218) 置位 flag 600-618 + 650-686（共 56 个）。
+                // 与 Example/TOA_002"只地图全开"参考档完全一致；TotA15 四份存档交叉验证同一集合。
+                // flag 619-649 非地图数据（所有参考档均未置位），不写入。
+                int set = _saveData.UnlockAllMaps();
+
+                MessageBox.Show(
+                    LangText(
+                        string.Format("地图已全开（新增 {0}/56 个地名 flag，当前 {1}/56）。", set, _saveData.CountMapUnlockFlags()),
+                        string.Format("マップを全開放しました（新規{0}/56、現在{1}/56）。", set, _saveData.CountMapUnlockFlags())),
+                    LangText("提示", "情報"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(string.Format(LangText("地图全开失败：\n{0}", "マップ全開放失敗：\n{0}"), ex.Message), LangText("错误", "エラー"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -689,26 +738,31 @@ namespace TOAHEX
 
             try
             {
-                // 按游戏真实四段布局填充（sub_37C948 保存 / sub_3A7C24 加载逐段对应）
-                byte[] mainFill = new byte[SaveOffsets.BOOK_MAIN_FLAGS_SIZE];
-                for (int i = 0; i < mainFill.Length; i++) mainFill[i] = 0xFF;
-                _saveData.WriteBytes(SaveOffsets.BOOK_MAIN_FLAGS_OFFSET, mainFill);
-
-                byte[] subFill = new byte[SaveOffsets.BOOK_SUB_FLAGS_SIZE];
-                for (int i = 0; i < subFill.Length; i++) subFill[i] = 0xFF;
-                _saveData.WriteBytes(SaveOffsets.BOOK_SUB_FLAGS_OFFSET, subFill);
-
-                byte[] detailFill = new byte[SaveOffsets.BOOK_DETAIL_DATA_SIZE];
-                for (int i = 0; i < detailFill.Length; i++) detailFill[i] = 0x01;
-                _saveData.WriteBytes(SaveOffsets.BOOK_DETAIL_DATA, detailFill);
-
-                byte[] extraFill = new byte[SaveOffsets.BOOK_EXTRA_DATA_SIZE];
-                for (int i = 0; i < extraFill.Length; i++) extraFill[i] = 0x01;
-                _saveData.WriteBytes(SaveOffsets.BOOK_EXTRA_DATA_OFFSET, extraFill);
-
-                int itemCount = 0;
-                for (int i = 0; i < SaveOffsets.BODY_ITEM_COUNT; i++)
+                // 图鉴登记位：BOOK_EXTRA(file 0xBD10) 每道具 1 字节 bit0=已获得登记
+                // （SetItemQtyWithClamp sub_2F366C 数量≠0 时 |=1，Load 遍历 640 道具自动登记，跨周目继承）。
+                // 2026-08-28 黑屏排查新增：跳过"无实体/占位"道具 ID（BOOK_NO_ENTITY_IDS，如 43-51 谱石占位、
+                // 561+ 敌人图鉴/音盘占位等），图鉴渲染假定 bit0=已获得 的道具必有实体配置，置位会读空配置崩黑屏。
+                // ⚠ 二次修订：216 金属利刃、619 应援俱乐部会报 是真实道具，不再跳过（图鉴不再显示问号）。
+                int registered = 0;
+                for (int i = 0; i < SaveOffsets.BOOK_ITEM_REGISTER_COUNT; i++)
                 {
+                    if (SaveOffsets.BOOK_NO_ENTITY_IDS.Contains(i)) continue;
+                    int off = SaveOffsets.BOOK_EXTRA_DATA_OFFSET + i;
+                    byte cur = _saveData.ReadU8(off);
+                    if (cur == 0 || (cur & 0x01) == 0)
+                    {
+                        _saveData.WriteU8(off, (byte)(cur | 0x01));
+                        registered++;
+                    }
+                }
+
+                // 发道具：跳过无实体 ID、id0、剧情贵重品（ID 531 罗蕾莱的宝珠——提前持有会触发
+                // 剧情判定异常）与 ID≥561 的任务/系统关键道具，其余未持有的补 1 个用于图鉴登记。
+                int itemCount = 0;
+                for (int i = 1; i < SaveOffsets.BODY_ITEM_COUNT && i < 561; i++)
+                {
+                    if (SaveOffsets.BOOK_NO_ENTITY_IDS.Contains(i)) continue;
+                    if (i == SaveOffsets.BOOK_STORY_KEEPSAKE_ID) continue;
                     byte val = _saveData.ReadU8(SaveOffsets.BODY_ITEM_ARRAY + i);
                     if (val == 0)
                     {
@@ -717,8 +771,16 @@ namespace TOAHEX
                     }
                 }
 
+                // 道具收集图鉴（ID 565，贵重品·菜单开启钥匙）：持有时才开启主菜单"道具图鉴"页
+                // （用户实测：无此道具图鉴菜单不显示），全开时强制设为 1。
+                if (_saveData.ReadU8(SaveOffsets.BODY_ITEM_ARRAY + SaveOffsets.BOOK_COLLECT_BOOK_ID) == 0)
+                {
+                    _saveData.WriteU8(SaveOffsets.BODY_ITEM_ARRAY + SaveOffsets.BOOK_COLLECT_BOOK_ID, 1);
+                    itemCount++;
+                }
+
                 RefreshItemsTab();
-                MessageBox.Show(string.Format(LangText("道具图鉴已全开，获得 {0} 个新道具。", "アイテム図鑑を全開にし、{0}個の新アイテムを獲得しました。"), itemCount), LangText("提示", "情報"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show(string.Format(LangText("道具图鉴已全开（登记 {0} 项，获得 {1} 个新道具，含图鉴菜单钥匙 565），跳过无实体/剧情贵重品。", "アイテム図鑑を全開放しました（{0}項目登録、新アイテム{1}個、図鑑メニュー鍵565含む）。実体なし/ストーリー貴重品は除外。"), registered, itemCount), LangText("提示", "情報"), MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
             {
@@ -791,7 +853,7 @@ namespace TOAHEX
             try
             {
                 string category = cmbItemCategory.SelectedItem as string;
-                var items = ItemDatabase.GetByCategory(category);
+                var items = ItemDatabase.GetByFilterCategory(category);
                 int count = 0;
                 foreach (var item in items)
                 {
@@ -1730,7 +1792,7 @@ namespace TOAHEX
 
             if (category != "全部")
             {
-                var ids = ItemDatabase.GetByCategory(category).Select(i => i.Id).ToList();
+                var ids = ItemDatabase.GetByFilterCategory(category).Select(i => i.Id).ToList();
                 conds.Add(ids.Count == 0 ? "ID = -1" : $"ID IN ({string.Join(",", ids)})");
             }
 
@@ -2284,7 +2346,7 @@ namespace TOAHEX
             int nlv = (lv + 1) % ABILITY_LEVELS.Length;
             SetAbilityLevel(nlv);
 
-            ChecksumHelper.FixToaChecksum(_saveData.Buffer);
+            _saveData.FixChecksum();
             RefreshAbilityStatus();
             RefreshSideDoneStatus();
 
@@ -2370,7 +2432,7 @@ namespace TOAHEX
                     if (ent.complete_flag > 0)
                         SetStoryFlag(ent.complete_flag, set);
             }
-            ChecksumHelper.FixToaChecksum(_saveData.Buffer);
+            _saveData.FixChecksum();
             RefreshSideDoneStatus();
             statusLabel.Text = set
                 ? LangText("已全部完成所有支线任务", "すべてのサブクエストを完了にしました")
@@ -2537,6 +2599,23 @@ namespace TOAHEX
                 // 写地图ID
                 _saveData.WriteU32(SaveOffsets.BODY_MAP_ID, mapId);
 
+                // 同步头部地图信息（BuildToaSaveBuffer sub_37C948 每次存档都会重写这两处；
+                // 游戏读档/存档界面显示的地图ID(0x34)和地名(0x4C)必须一起改，否则跳转后
+                // 界面仍显示旧地图）。0x4C = maptable 显示名（TBL 编码，sub_2D8E14 原样 strcpy）。
+                _saveData.HeadMapId = mapId;
+                if (mapId >= 1 && mapId < 650)
+                {
+                    string mapDispName = StoryJumpDatabase.GetMapName(mapId);
+                    if (!string.IsNullOrEmpty(mapDispName) && !mapDispName.StartsWith("<"))
+                    {
+                        // PS2 存档：DB 显示名为 3DS 中文译文，用 cp932 写入会产生大量 '?' 替换
+                        // → 记忆卡列表显示会乱码；游戏下次内存档会按 JP 码表重写正确地名。
+                        // PS2 跳过 0x4C 写入；3DS 仍按 TBL 编码写入（编码失败也只是跳过，不影响跳转本身）。
+                        if (_saveData.Platform != Platform.Ps2)
+                            _saveData.WriteLocationName(mapDispName, out string nameErr);
+                    }
+                }
+
                 // 写坐标（入口点编号转 float，与 MapWarp 命令一致）
                 // fallback 条件 = X==0 且 Z==0 时才用默认 X=0.01/Z=0.02（反汇编 sub_1A149C:
                 //   VCMP X,0; VLDREQ Z; VCMPEQ Z,0 → 仅当 X 和 Z 都为 0 才 fallback，缺一不可）
@@ -2565,8 +2644,8 @@ namespace TOAHEX
                 if (clearFlags != null)
                     foreach (int f in clearFlags) SetStoryFlag(f, false);
 
-                // 重算双校验和
-                ChecksumHelper.FixToaChecksum(_saveData.Buffer);
+                // 重算双校验和（PS2/3DS 按平台分发）
+                _saveData.FixChecksum();
 
                 _loading = false;
                 RefreshStoryJumpTab();
@@ -2739,7 +2818,7 @@ namespace TOAHEX
             }
             bool cur = IsFlagSet(flag);
             SetStoryFlag(flag, !cur);
-            ChecksumHelper.FixToaChecksum(_saveData.Buffer);
+            _saveData.FixChecksum();
             int sel = lstSideQuests.SelectedIndex;
             RefreshSideDoneStatus();
             if (sel >= 0 && sel < lstSideQuests.Items.Count)

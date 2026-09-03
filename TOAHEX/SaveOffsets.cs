@@ -29,12 +29,19 @@ namespace TOAHEX
         public const int HEAD_GALD_COPY = 0x002C;
         public const int HEAD_PLAYTIME_COPY = 0x0030;
         public const int HEAD_PARTY_ORDER = 0x0044;
-        public const int HEAD_LOCATION_NAME = 0x004C;
+        // 头部地图信息（BuildToaSaveBuffer sub_37C948：v6[13]=runtime+988 当前地图ID，
+        // 0x4C=maptable 显示名（sub_2D8E14 纯 strcpy 原样拷贝，TBL 编码）。每次游戏内存档会重写。
+        // 剧情跳跃改地图后必须同步 0x34+0x4C，否则存档/读取界面仍显示旧地图。
+        public const int HEAD_MAP_ID = 0x0034;           // u32 当前地图ID（与 body 0x528 同步）
+        public const int HEAD_LOCATION_NAME = 0x004C;    // 32B 显示名（TBL 编码，0x00 截断）
 
         public const int BODY_GALD = 0x051C;
         public const int BODY_PLAYTIME = 0x0520;
         public const int BODY_PARTY_COUNT_COPY = 0x0518; // u16 队伍人数镜像（读档恢复到 word[485]）
-        public const int BODY_FEATURE_FLAGS = 0x052C;
+        // ⚠ 旧 BODY_FEATURE_FLAGS = 0x052C 已删除（2026-09-03 IDA 复核）：
+        //   3DS 0x52C 实为 u32 地图切换计数（见 BODY_MAP_TRANSITION_COUNT），PS2 0x52C 则是地图 ID。
+        //   写它对功能解锁完全无效。C·コア / FSチャンバー 的真实解锁由全局 flag 位图(0x218)中的
+        //   "教程完成 flag"控制（详见 GLOBAL_FLAG_C_CORE / GLOBAL_FLAG_FS_CHAMBER 注释）。
         public const int BODY_ENCOUNTER = 0x229C;
         public const int BODY_HIT = 0x22B0;
         public const int BODY_PARTY_ORDER = 0x07C4;
@@ -62,18 +69,100 @@ namespace TOAHEX
         public const int BODY_ITEM_ARRAY = 0x0542;
         public const int BODY_ITEM_COUNT = 640;
 
-        public const int JOURNAL_FLAGS_OFFSET = 0x0224;
-        public const int JOURNAL_FLAGS_SIZE = 0x02DC;
+        // ============ 收集/图鉴（2026-08-28 IDA MCP 重审计定案） ============
+        // 旧"日志全开"写 0x224~0x500 全 FF —— 该区间位于全局 flag 位图(0x218~0x518, 768B)内部，
+        // 覆盖剧情/支线进度 flag(96~5951)，全 FF = 互斥剧情状态同时成立 → 读档黑屏。严禁再整段填充。
+        // 聊天(チャット)收集位图：bit 512+N（即 file 0x418+N/8），N=0..537 共 538 个条目
+        //   （sub_2E98A4 读 / sub_2DB480 写 / sub_2E98CC 完成度计数，表 word_4F0C24）。
+        //   ⚠ 该位图属于聊天收集、不属于"日记"（Example/TOA_000 日记全开参考档未动它），
+        //   且置位后已 seen 的聊天不再触发，有副作用 → "日志全开"按钮不写。常量仅作知识记录。
+        // 道具图鉴登记位：BOOK_EXTRA(file 0xBD10) 每道具 1 字节，bit0=已获得/登记
+        //   （SetItemQtyWithClamp sub_2F366C：数量≠0 时 |=1；读档时对持有道具重新登记）
+        public const int CHAT_SEEN_BITMAP = 0x0418;        // 68B（538 bit）全 FF = 聊天记录全开（勿随日志全开写入）
+        public const int CHAT_SEEN_BITMAP_SIZE = 68;
+
+        // ===== 日记（ライブラリ）条目解锁表（2026-08-28 Example 差分 + IDA 复核修正旧误判）=====
+        // BOOK_SUB(file 0xBAD0) 实为"日记"条目解锁计数表，并非道具图鉴来源数：
+        //   sub_2DE8CC/sub_2D6488（日记菜单）按 BOOK_SUB[i] 枚举第 i 条日记的可见文本页数
+        //   （0=锁定，1..N=前 N 页，0xFF=全部显示）；新游戏 sub_2EA314 清零；
+        //   NG+ 收集继承 sub_171D80(bit 0x4000000) 整段 256B 拷贝；脚本命令(sub_19E054)直接写值。
+        //   条目总数 = dword_4F0508 = 114（Example/TOA_000 日记全开参考档恰为前 114 字节全 FF）。
+        //   旧结论"全 FF=图鉴全空"有误：0xFF 是"全部页可见"，非空哨兵。
+        public const int DIARY_ENTRY_FLAGS = 0xBAD0;       // 日记条目解锁表（=BOOK_SUB 前 114B）
+        public const int DIARY_ENTRY_COUNT = 114;
+
+        // ===== 日记全开联动的脚本变量 type 标记（Example/TOA_000 实测差分）=====
+        // 变量条目布局（LoadToaSaveBuffer body+0x298D ↔ file 0x2BA1）：
+        //   [type u16 @0x2BA1+8N][高位u16 @0x2BA3+8N][value u32 @0x2BA5+8N]，type=0x0200 int/0x0300 float。
+        // 日记全开参考档把以下 121 个变量的 type 高 16 位从 0x0000 置为 0x3F80（value 不变）：
+        //   var 154-269（值 100~2000，Grade 商店项/价格）、338/339/340、563、621。
+        // 与参考档逐字节对齐（Type u32: 0x00000200 → 0x3F800200）。
+        public const int SCRIPT_VAR_ENTRY_BASE = 0x2BA1;  // var N 条目起始
+        public const int SCRIPT_VAR_MARK_HIGH = 0x3F80;   // type 高16位解锁标记
+        public static readonly int[] DIARY_MARK_VARS = new int[]
+        {
+            154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168,
+            169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183,
+            184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198,
+            199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213,
+            214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 228,
+            229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242, 243,
+            244, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255, 256, 257, 258,
+            259, 260, 261, 262, 263, 264, 265, 266, 267, 268, 269,
+            338, 339, 340, 563, 621
+        };
+
+        // ===== 地图全开（Example/TOA_002 差分 + TotA15 四档交叉验证）=====
+        // 全局 flag 位图(0x218)中 flag 600-618(19个) + 650-686(37个) 共 56 个 = 世界地图地名全开。
+        // TotA15 全部四份存档（含章1早期档）这 56 个 flag 恒为同一集合，与"只地图全开"参考档完全一致。
+        // flag 619-649 不属于地图数据（所有参考档均未置位），严禁写入。
+        public const int MAP_UNLOCK_FLAG_RANGES_LO1 = 600;   // 第一段起始 flag（含）
+        public const int MAP_UNLOCK_FLAG_RANGES_HI1 = 618;   // 第一段结束 flag（含）
+        public const int MAP_UNLOCK_FLAG_RANGES_LO2 = 650;   // 第二段起始 flag（含）
+        public const int MAP_UNLOCK_FLAG_RANGES_HI2 = 686;   // 第二段结束 flag（含）
 
         // 图鉴四段布局（与游戏 sub_37C948 保存 / sub_3A7C24 加载逐段对应）
+        // ⚠ 实测四段中只有 EXTRA 可安全写（bit0 登记）；其余三段并非纯收集位图：
+        //   MAIN(0xB2D0)=运行时菜单结构原样转储（含堆指针/计时器，每次存档自然变化，勿写）；
+        //   SUB(0xBAD0)=日记条目解锁表（见上方 DIARY_ENTRY_FLAGS，前 114B 可安全写 0xFF）；
+        //   DETAIL(0xBBD0)=静态属性配置（四份不同进度存档完全相同），写 0x01=损坏。
         public const int BOOK_MAIN_FLAGS_OFFSET = 0xB2D0; // 2048B 主 flags（运行时全局+315740）
         public const int BOOK_MAIN_FLAGS_SIZE = 0x0800;
         public const int BOOK_SUB_FLAGS_OFFSET = 0xBAD0;   // 256B（运行时全局+317788）
         public const int BOOK_SUB_FLAGS_SIZE = 0x0100;
         public const int BOOK_DETAIL_DATA = 0xBBD0;        // 320B（运行时全局+250076，640道具×4bit）
         public const int BOOK_DETAIL_DATA_SIZE = 0x0140;
-        public const int BOOK_EXTRA_DATA_OFFSET = 0xBD10;  // 720B（运行时全局+250396）
+        public const int BOOK_EXTRA_DATA_OFFSET = 0xBD10;  // 720B（运行时全局+250396，每道具1B，bit0=登记）
         public const int BOOK_EXTRA_DATA_SIZE = 0x02D0;
+        public const int BOOK_ITEM_REGISTER_COUNT = 640;   // 登记位有效道具数（0..639）
+
+        // ===== 道具图鉴全开安全规则（2026-08-28 排查黑屏新增，二次修订）=====
+        // 道具图鉴 = EXT[id] bit0 登记（Load 会遍历 640 道具对 qty>0 自动 |=1，SetItemQtyWithClamp
+        // 改数量时同步 |=1，跨周目继承）。全开登记应把"真实存在"的道具全部置位；图鉴渲染假定
+        // bit0=已获得 的道具必有实体配置。以下 ID 为游戏内"无实体/占位"条目（DAT 道具表有记录名
+        // 但 ptr4 分类为空、通关档从未持有），置位会使道具图鉴页读空配置崩溃黑屏，必须跳过：
+        //   0（空槽占位）、43-51（黄/蓝/红/绿/白/黑谱石占位 + 攻击道具预备1-3）、
+        //   561-563（人偶预备1-3）、566（敌人图鉴占位）、569（通灵指环占位）、
+        //   617（幻想的音盘占位）、625（漆黑之翼的预告信占位）、631-639（道具表未收录）。
+        // ⚠ 二次修订：216「金属利刃」(武器：剑) 与 619「应援俱乐部会报」(道具：贵重品) 是真实道具，
+        //   之前误把 EXT 值 0x00 当"无实体"跳过了它们 → 图鉴显示问号，现已从集合中移除。
+        // 另：发动"发道具补数量"时必须跳过剧情贵重品 ID 531「罗蕾莱的宝珠」（贵重品：纹章），
+        // 提前持有会触发剧情判定异常。
+        public static readonly int[] BOOK_NO_ENTITY_IDS = new int[]
+        {
+            0, 43, 44, 45, 46, 47, 48, 49, 50, 51,
+            561, 562, 563, 566, 569, 617, 625,
+            631, 632, 633, 634, 635, 636, 637, 638, 639
+        };
+        public const int BOOK_NO_ENTITY_IDS_LO = 43;   // 占位道具起始（43-51）
+        public const int BOOK_NO_ENTITY_IDS_HI = 51;   // 占位道具结束
+        public const int BOOK_STORY_KEEPSAKE_ID = 531;   // 罗蕾莱的宝珠（贵重品：纹章），发道具需跳过
+
+        // ===== 收集图鉴开启道具（2026-08-28 用户实测）=====
+        // 通关档持有 qty=1 / EXT=0x03，早期档 qty=0 —— 拥有该贵重品才开启主菜单的"道具图鉴"页面
+        // （用户反馈点全开后图鉴菜单仍不显示，遂要求全开时把此道具设为 1）。
+        // 同类还有 564 世界地图(世界地图菜单)、567 角色盘(角色图鉴)；按用户要求仅发放 565。
+        public const int BOOK_COLLECT_BOOK_ID = 565;     // 道具收集图鉴（贵重品·菜单开启钥匙）
 
         public static readonly int[] CHAR_BASE_OFFSETS = new int[8]
         {
@@ -207,6 +296,22 @@ namespace TOAHEX
         public const int FLAG_BITMAP = 0x218;              // 位图基址，flag N = [N/8] 的 bit(N%8)
         public const int FLAG_BITMAP_SIZE = 768;           // 0x218~0x518，共 flag 0~6143
 
+        // ===== 功能解锁 flag（2026-09-03 IDA + 四档差分定案）=====
+        // 游戏侧证据（3DS ExeFS.elf，PS2 同语义）：
+        //   1) 道具使用门 sub_3C4F7C（按 itemtable+21 类别分发）：类别 0x22 道具使用需 flag 2007、
+        //      类别 0x23 需 flag 2009，未置位时按"无法使用"处理（响声提示）。
+        //      类别 0x22 = C·コア(響律符 92-121)，类别 0x23 = FSチャンバー(嵌石 122-125)。
+        //   2) 顶级菜单处理 sub_399724：菜单 id 3（カスタマイズ）的子页面列表为
+        //      {0, (flag2007→1), 2, (flag2009→3)}，即 C·コア 页需 2007、FSチャンバー 页需 2009。
+        //   3) 支线跳跃库：战斗新手教程 FOF(1005110)→clear 2008、新手教程 FS嵌石(1009060)→clear 2009，
+        //      教程 flag 连续编号；"新手教程 CC符"(1003130) 对应 2007。
+        //      （flag 2013 = NG+ 开局标志，sub_19C414 case31 写入，交叉印证 2000+ 段为系统解锁 flag。）
+        //   4) TotA15 四档实证：TOA_000/001/003（后期档）2007/2009 恒置位；
+        //      TOA_002（新档，仅地图 flag+2013）均未置位。
+        //   PS2 存档 0x218 位图位于同位区间 [0,0x528)，经 MapOffset 自动适配。
+        public const int GLOBAL_FLAG_C_CORE = 2007;        // 新手教程「CC符」完成 → 解锁 C·コア(响律符)
+        public const int GLOBAL_FLAG_FS_CHAMBER = 2009;    // 新手教程「FS嵌石」完成 → 解锁 FSチャンバー(音素质点嵌石)
+
         // TOASYS 布局（sub_37D584 保存 / sub_3A9840 加载；数据区 = 运行时结构 unk_53C924 镜像）
         // 2026-08-19 双存档 diff + 用户记录交叉验证 + IDA（sub_333800 菜单构建/sub_199xxx 统计API族）定案：
         public const int TOASYS_VERSION = 0x04;            // float 0.2 版本号（只读）
@@ -228,5 +333,23 @@ namespace TOAHEX
         public const int TOASYS_UNLOCK_BITMAP_SIZE = 0x80;
         // ⚠ 0x1C-0x20 之间(0x34 等)与 0x40-0x6B 区含义未明；0x40-0x57 为开机队伍恢复数组（sub_159478）
         //    严禁 UI 写入；0x638/0x684 无代码引用不写入
+
+        // ============ PS2 日版存档（平台核心支持）============
+        // PS2 日版与 3DS 版存档字段布局语义一致，仅字节位置存在少量平移：
+        // 主档 49096B（比 3DS 少 24B）、系统档 1832B（比 3DS 少 28B）。
+        // 本类全部语义偏移常量保持 3DS 定义不变，PS2 偏移差异由 SaveData.MapOffset()
+        // 在私有读写原语内统一翻译，上层（MainForm 等）无感知。
+        public const int PS2_TOA_XXX_SIZE = 49096;        // 0xBFC8 PS2日版主存档
+        public const int PS2_TOASYS_SIZE = 1832;          // 0x728 PS2日版系统存档
+        public const int PS2_BODY_DATA_SIZE = 48564;      // [0x214, 0xBFC8)
+        public const int PS2_TOASYS_DATA_SIZE = 1824;     // [0x08, 0x728)
+        // PS2 主档偏移翻译区间边界（3DS 语义偏移基准）：
+        // [0, PS2_MAP_IDENTITY_END) 同位；[PS2_MAP_IDENTITY_END, PS2_MAP_PLUS4_END) PS2=3DS+4；
+        // [PS2_MAP_PLUS4_END, DS_ONLY_REGION_END) 为 3DS 专属常量区，PS2 无映射；之后到文件尾 PS2=3DS-24
+        public const int PS2_MAP_IDENTITY_END = 1320;     // 0x528
+        public const int PS2_MAP_PLUS4_END = 43980;       // 0xABCC
+        public const int DS_ONLY_REGION_END = 44016;      // 0xABF0
+        // PS2 系统档：[0, SYS_MAP_IDENTITY_END) 同位；之后 PS2=3DS-28
+        public const int SYS_MAP_IDENTITY_END = 1552;
     }
 }

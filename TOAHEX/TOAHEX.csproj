@@ -45,6 +45,7 @@
     <Compile Include="SaveOffsets.cs" />
     <Compile Include="ChecksumHelper.cs" />
     <Compile Include="SaveData.cs" />
+    <Compile Include="Ps2To3dsConverter.cs" />
     <Compile Include="TblCodec.cs" />
     <Compile Include="ItemData.cs" />
     <Compile Include="Database\ItemDatabase.cs" />
@@ -54,6 +55,7 @@
     <Compile Include="ArteSelectForm.cs" />
     <Compile Include="EquipSelectForm.cs" />
     <Compile Include="TitleSelectForm.cs" />
+    <Compile Include="ConvertPs2Form.cs" />
     <Compile Include="Database\CookingDatabase.cs" />
     <Compile Include="LanguageConfig.cs" />
     <Compile Include="DatDataLoader.cs" />
@@ -78,6 +80,7 @@
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="new_patched.tbl" />
+    <EmbeddedResource Include="Resources\3ds_template.bin" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

@@ -23,6 +23,7 @@ namespace TOAHEX
             MinimizeBox = false;
             MaximizeBox = false;
             FormBorderStyle = FormBorderStyle.FixedDialog;
+            try { Icon = MainForm.GetAppIcon(); } catch { }
 
             dgvTitles = new DataGridView();
             dgvTitles.Location = new Point(12, 12);

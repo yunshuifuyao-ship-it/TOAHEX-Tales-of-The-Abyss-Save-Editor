@@ -116,14 +116,29 @@ namespace TOAHEX
             EnsureInitialized();
             if (categoryName == "全部") return _items.Values.ToList();
 
-            return _items.Values.Where(i =>
-            {
-                if (i.Category == categoryName) return true;
-                if (i.TypeName == categoryName) return true;
-                if (!string.IsNullOrEmpty(i.Category) && !string.IsNullOrEmpty(i.SubCategory)
-                    && (i.Category + "：" + i.SubCategory) == categoryName) return true;
-                return false;
-            }).ToList();
+            return _items.Values.Where(i => CategoryMatch(i, categoryName, false)).ToList();
+        }
+
+        /// <summary>
+        /// 背包类别筛选专用：在 GetByCategory 基础上额外支持「子分类」匹配，
+        /// 保证 DAT 中分类为「道具：贵重品」等子分类道具能通过子分类名被筛出。
+        /// </summary>
+        public static List<ItemData> GetByFilterCategory(string categoryName)
+        {
+            EnsureInitialized();
+            if (categoryName == "全部") return _items.Values.ToList();
+
+            return _items.Values.Where(i => CategoryMatch(i, categoryName, true)).ToList();
+        }
+
+        private static bool CategoryMatch(ItemData i, string categoryName, bool includeSubCategory)
+        {
+            if (i.Category == categoryName) return true;
+            if (i.TypeName == categoryName) return true;
+            if (includeSubCategory && i.SubCategory == categoryName) return true;
+            if (!string.IsNullOrEmpty(i.Category) && !string.IsNullOrEmpty(i.SubCategory)
+                && (i.Category + "：" + i.SubCategory) == categoryName) return true;
+            return false;
         }
 
         public static List<ItemData> GetByCategoryAndSubCategory(string category, string[] subCategories)
@@ -153,14 +168,53 @@ namespace TOAHEX
 
         public static List<string> GetCategoryNames()
         {
-            if (_datCategoryNames != null && _datCategoryNames.Count > 1)
-                return _datCategoryNames;
+            EnsureInitialized();
+            var result = new List<string> { "全部" };
 
-            return new List<string>
+            // 1) DAT 父类分类（道具/食材/武器/防具/贵重品…）
+            if (_datCategoryNames != null)
             {
-                "全部", "素材/交易品", "软糖", "瓶", "强化道具", "特殊道具",
-                "武器", "防具", "装饰品", "贵重品"
-            };
+                foreach (var c in _datCategoryNames)
+                {
+                    if (c != "全部" && !result.Contains(c)) result.Add(c);
+                }
+            }
+
+            // 2) DAT 子分类（软糖/瓶/剑/杖/枪/弓/贵重品…），提供更细粒度的筛选
+            if (_datFullData != null)
+            {
+                foreach (var kv in _datFullData)
+                {
+                    if (!kv.Value.TryGetValue("ptr4", out var ptr4) || string.IsNullOrEmpty(ptr4)) continue;
+                    int colonIdx = ptr4.Contains('：') ? ptr4.IndexOf('：')
+                               : (ptr4.Contains(':') ? ptr4.IndexOf(':') : -1);
+                    if (colonIdx < 0 || colonIdx == ptr4.Length - 1) continue;
+                    string sub = ptr4.Substring(colonIdx + 1).Trim();
+                    if (!string.IsNullOrEmpty(sub) && !result.Contains(sub)) result.Add(sub);
+                }
+            }
+
+            // 3) ptr4 为空（无 DAT 分类）道具按 TypeName 兜底，保证每个道具至少可被一个类别命中
+            foreach (var i in _items.Values)
+            {
+                if (string.IsNullOrEmpty(i.Category) && !string.IsNullOrEmpty(i.TypeName) && !result.Contains(i.TypeName))
+                    result.Add(i.TypeName);
+            }
+
+            // 4) 无 DAT 时的硬编码兜底分类
+            foreach (var c in new[] { "素材/交易品", "软糖", "瓶", "强化道具", "特殊道具", "武器", "防具", "装饰品", "贵重品" })
+            {
+                if (!result.Contains(c)) result.Add(c);
+            }
+
+            // 5) 硬编码预置子分类兜底（无 DAT 时）
+            foreach (var i in _items.Values)
+            {
+                if (!string.IsNullOrEmpty(i.SubCategory) && !result.Contains(i.SubCategory))
+                    result.Add(i.SubCategory);
+            }
+
+            return result;
         }
 
         private static void EnsureInitialized()

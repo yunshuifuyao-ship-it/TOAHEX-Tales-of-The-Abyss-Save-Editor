@@ -33,6 +33,9 @@ namespace TOAHEX
             this.menuLangJP = new ToolStripMenuItem();
             this.menuHelp = new ToolStripMenuItem();
             this.menuHelpAbout = new ToolStripMenuItem();
+            this.menuTools = new ToolStripMenuItem();
+            this.menuToolsCharName = new ToolStripMenuItem();
+            this.menuToolsConvertPs2 = new ToolStripMenuItem();
             this.statusStrip = new StatusStrip();
             this.statusLabel = new ToolStripStatusLabel();
             this.tabControl = new TabControl();
@@ -48,7 +51,7 @@ namespace TOAHEX
             this.menuFileSaveAs.Name = "menuFileSaveAs";
             this.menuFileExit.Name = "menuFileExit";
 
-            this.menuStrip.Items.AddRange(new ToolStripItem[] { this.menuFile, this.menuLanguage, this.menuHelp });
+            this.menuStrip.Items.AddRange(new ToolStripItem[] { this.menuFile, this.menuLanguage, this.menuHelp, this.menuTools });
             this.menuStrip.Location = new Point(0, 0);
             this.menuStrip.Name = "menuStrip";
             this.menuStrip.Size = new Size(780, 25);
@@ -109,6 +112,22 @@ namespace TOAHEX
             this.menuHelpAbout.Click += new System.EventHandler(this.menuHelpAbout_Click);
             this.menuHelp.DropDownItems.AddRange(new ToolStripItem[] { this.menuHelpAbout });
 
+            this.menuTools.Name = "menuTools";
+            this.menuTools.Size = new Size(37, 21);
+            this.menuTools.Text = LangText("工具", "ツール");
+
+            this.menuToolsCharName.Name = "menuToolsCharName";
+            this.menuToolsCharName.Size = new Size(220, 22);
+            this.menuToolsCharName.Text = LangText("更改角色名…", "キャラ名変更…");
+            this.menuToolsCharName.Click += new System.EventHandler(this.menuEditCharName_Click);
+
+            this.menuToolsConvertPs2.Name = "menuToolsConvertPs2";
+            this.menuToolsConvertPs2.Size = new Size(220, 22);
+            this.menuToolsConvertPs2.Text = LangText("PS2 → 3DS 存档转换…", "PS2 → 3DS セーブ変換…");
+            this.menuToolsConvertPs2.Click += new System.EventHandler(this.menuToolsConvertPs2_Click);
+
+            this.menuTools.DropDownItems.AddRange(new ToolStripItem[] { this.menuToolsCharName, this.menuToolsConvertPs2 });
+
             this.statusStrip.Items.AddRange(new ToolStripItem[] { this.statusLabel });
             this.statusStrip.Location = new Point(0, 545);
             this.statusStrip.Name = "statusStrip";
@@ -165,6 +184,14 @@ namespace TOAHEX
 
         private Icon LoadAppIcon()
         {
+            return GetAppIcon();
+        }
+
+        private static Icon _appIcon;
+        /// <summary>获取应用图标（缓存，跨对话框复用）。</summary>
+        internal static Icon GetAppIcon()
+        {
+            if (_appIcon != null) return _appIcon;
             try
             {
                 var assembly = System.Reflection.Assembly.GetExecutingAssembly();
@@ -173,7 +200,8 @@ namespace TOAHEX
                 {
                     if (stream != null)
                     {
-                        return new Icon(stream);
+                        _appIcon = new Icon(stream);
+                        return _appIcon;
                     }
                 }
             }
@@ -184,7 +212,10 @@ namespace TOAHEX
                 string icoPath = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(
                     System.Reflection.Assembly.GetExecutingAssembly().Location), "Icon", "File.ico");
                 if (System.IO.File.Exists(icoPath))
-                    return new Icon(icoPath);
+                {
+                    _appIcon = new Icon(icoPath);
+                    return _appIcon;
+                }
             }
             catch { }
 
@@ -443,9 +474,9 @@ namespace TOAHEX
             this.tabGlobal.Controls.Add(grpFeatureFlags);
 
             var grpTools = new GroupBox();
-            grpTools.Text = LangText("工具", "ツール");
+            grpTools.Text = LangText("快捷修改", "クイック編集");
             grpTools.Location = new Point(365, 238);
-            grpTools.Size = new Size(380, 160);
+            grpTools.Size = new Size(380, 162);
             grpTools.Anchor = AnchorStyles.Top | AnchorStyles.Left;
 
             this.btnJournalAll = new Button();
@@ -504,13 +535,13 @@ namespace TOAHEX
             this.btnAllItemsMax.Click += new EventHandler(this.btnAllItemsMax_Click);
             grpTools.Controls.Add(this.btnAllItemsMax);
 
-            // 原"编辑"菜单项移入工具组
-            this.btnCharName = new Button();
-            this.btnCharName.Text = LangText("更改角色名...", "キャラ名変更...");
-            this.btnCharName.Location = new Point(192, 110);
-            this.btnCharName.Size = new Size(170, 24);
-            this.btnCharName.Click += new EventHandler(this.menuEditCharName_Click);
-            grpTools.Controls.Add(this.btnCharName);
+            // "更改角色名"已移至顶部「工具」菜单（menuToolsCharName）
+            this.btnMapAll = new Button();
+            this.btnMapAll.Text = LangText("地图全开", "マップ全開放");
+            this.btnMapAll.Location = new Point(192, 110);
+            this.btnMapAll.Size = new Size(170, 24);
+            this.btnMapAll.Click += new EventHandler(this.btnMapAll_Click);
+            grpTools.Controls.Add(this.btnMapAll);
 
             this.tabGlobal.Controls.Add(grpTools);
 
@@ -1366,6 +1397,9 @@ namespace TOAHEX
         private ToolStripMenuItem menuLangJP;
         private ToolStripMenuItem menuHelp;
         private ToolStripMenuItem menuHelpAbout;
+        private ToolStripMenuItem menuTools;
+        private ToolStripMenuItem menuToolsCharName;
+        private ToolStripMenuItem menuToolsConvertPs2;
         private StatusStrip statusStrip;
         private ToolStripStatusLabel statusLabel;
         private TabControl tabControl;
@@ -1392,6 +1426,7 @@ namespace TOAHEX
 
         private Button btnJournalAll;
         private Button btnItemBookAll;
+        private Button btnMapAll;
 
         private Button btnGetAllEquip;
 
@@ -1540,7 +1575,6 @@ namespace TOAHEX
         private Button btnAllFSMax;
         private Button btnAllCookingMax;
         private Button btnAllItemsMax;
-        private Button btnCharName;
 
         private void InitStoryJumpTab()
         {

@@ -37,6 +37,7 @@ namespace TOAHEX
             MinimizeBox = false;
             MaximizeBox = false;
             FormBorderStyle = FormBorderStyle.FixedDialog;
+            try { Icon = MainForm.GetAppIcon(); } catch { }
 
             txtSearch = new TextBox();
             txtSearch.Location = new Point(12, 12);
