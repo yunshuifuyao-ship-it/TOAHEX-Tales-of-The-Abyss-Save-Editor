@@ -123,11 +123,17 @@ namespace TOAHEX
 
         // 图鉴四段布局（与游戏 sub_37C948 保存 / sub_3A7C24 加载逐段对应）
         // ⚠ 实测四段中只有 EXTRA 可安全写（bit0 登记）；其余三段并非纯收集位图：
-        //   MAIN(0xB2D0)=运行时菜单结构原样转储（含堆指针/计时器，每次存档自然变化，勿写）；
+        //   MAIN(0xB2D0)=运行时结构（见下"尾部两段"），
         //   SUB(0xBAD0)=日记条目解锁表（见上方 DIARY_ENTRY_FLAGS，前 114B 可安全写 0xFF）；
         //   DETAIL(0xBBD0)=静态属性配置（四份不同进度存档完全相同），写 0x01=损坏。
+        // ⚠ MAIN(0xB2D0, 2048B) 内部还要再分两段（2026-10-05 IDA sub_37C948/sub_3A7C24 复核）：
+        //   [0xB2D0, 0xB50C) = 运行时指针数组：3DS 侧密集存放 3DS 堆指针（0x0048xxxx / 0x0879xxxx），
+        //     PS2 侧同槽位是索引/小整数 → 两版数据模型不同，**跨平台不可迁移**（既勿写、也勿从 PS2 复制）。
+        //   [0xB50C, 0xBAD0) = 字段/摄像机参考区：两版同构，可跨平台迁移，Δ 分段（见 FIELD_REF_SEGMENTS）；
+        //     含玩家 X/Z 的副本（3DS 恒在 0xB568/0xB574(X)、0xB57C(Z)），是"摄像机参考坐标"所在。
         public const int BOOK_MAIN_FLAGS_OFFSET = 0xB2D0; // 2048B 主 flags（运行时全局+315740）
         public const int BOOK_MAIN_FLAGS_SIZE = 0x0800;
+        public const int BOOK_RUNTIME_PTR_END = 0xB50C;   // 运行时指针数组末端（跨平台不可迁移）
         public const int BOOK_SUB_FLAGS_OFFSET = 0xBAD0;   // 256B（运行时全局+317788）
         public const int BOOK_SUB_FLAGS_SIZE = 0x0100;
         public const int BOOK_DETAIL_DATA = 0xBBD0;        // 320B（运行时全局+250076，640道具×4bit）
@@ -135,6 +141,49 @@ namespace TOAHEX
         public const int BOOK_EXTRA_DATA_OFFSET = 0xBD10;  // 720B（运行时全局+250396，每道具1B，bit0=登记）
         public const int BOOK_EXTRA_DATA_SIZE = 0x02D0;
         public const int BOOK_ITEM_REGISTER_COUNT = 640;   // 登记位有效道具数（0..639）
+
+        // ===== 字段/摄像机参考区（0xB50C..0xB800；2026-10-05 实测定案）=====
+        // 语义：该区为 per-save 的"字段参考"数据（坐标点表 / 摄像机参考），玩家位置会以副本形式
+        //   出现在 3DS 0xB568/0xB574(X) 与 0xB57C(Z)（四份原生 3DS 档实测一致）。
+        // PS2↔3DS 映射：整体 3DS = PS2 + 24，但在 0xB530..0xB5D0 窗口为 +32
+        //   （该窗口 3DS 结构体较 PS2 多 8 字节：0xB530/0xB534 = 0x01010101×2，四档恒定）。
+        // 用途：Ps2To3dsConverter 据此分段搬运（旧版整段回写 3DS 模板值 =
+        //   "玩家坐标对、摄像机坐标不对"的根因）。
+        public const int FIELD_REF_START = 0xB50C;               // 3DS 侧起点
+        public const int FIELD_REF_END = 0xB800;                 // 3DS 侧终点（此后至 0xBAD0 为同位 Δ+24）
+        public const int FIELD_REF_PLAYER_X_COPY = 0xB568;       // 玩家 X 副本（第二处 0xB574）
+        public const int FIELD_REF_PLAYER_Z_COPY = 0xB57C;       // 玩家 Z 副本
+        /// <summary>(3DS 起, 3DS 止, delta)，PS2 源偏移 = 3DS 偏移 - delta。</summary>
+        public static readonly int[,] FIELD_REF_SEGMENTS = new int[,]
+        {
+            { 0xB50C, 0xB530, 24 },
+            { 0xB538, 0xB5D0, 32 },
+            { 0xB5D0, 0xB800, 24 }
+        };
+        public const int FIELD_REF_DS_ONLY_INSERT_START = 0xB530; // 3DS 专属插入 0x01010101×2
+        public const int FIELD_REF_DS_ONLY_INSERT_END = 0xB538;
+
+        // ===== 队伍编成预设（4×120B，2026-10-05 定案）=====
+        // 3DS 10384..10864 = runtime+10084，4 条 120B 预设记录，每条 +0 起 16 字节为"预设名"。
+        // 两版结构完全同构、文件 Δ 与主体一致(+4)，唯一差异是名称文字编码：
+        //   PS2  Shift-JIS デフォルト / 攻めにいくぞ / 守備して戦え / 俺は戦える
+        //   3DS  本地化 ASCII Default / Attack! / Hold 'em off! / On your guard!
+        // → 转换时名称字段保留 3DS(native) 以免乱码，其余字节从 PS2 带入（保留玩家自定义编成）。
+        public const int PRESET_RECORD_BASE = 10384;
+        public const int PRESET_RECORD_SIZE = 120;
+        public const int PRESET_RECORD_COUNT = 4;
+        public const int PRESET_NAME_SIZE = 16;
+
+        // ===== 136B+168B 块（2026-10-05 定案，已修正此前误判）=====
+        // 3DS 10864..11168 = runtime+10564(136B) / +10700(168B)。**双方 1:1 真字段块**：
+        // PS2 打包 sub_37D5C0 由 obj+10540..10796 写入 PS2 文件 10868..11172，
+        // PS2 加载 sub_37BDF0 亦恢复同区；文件 Δ 与主体一致(-4)，源偏移 obj+10540↔rt+10564、
+        // obj+10676↔rt+10700（源 Δ=+24）→ 由主体 +4 平移自动覆盖，转换器无需特判。
+        // 注：本 PS2 档该区全 0；TotA15 三份中后期 3DS 档在 168B 块内为同一组参考值
+        // (3DS 0x2B00..0x2B0F)，早期档为 0 —— 属 3DS 端状态差异，非结构差异。
+        public const int BLOCK_136_168_START = 10864;
+        public const int BLOCK_136_168_END = 11168;
+        public const int BLOCK_168_REF = 0x2B00;      // 168B 块内参考值组（3DS 端状态）
 
         // ===== 道具图鉴全开安全规则（2026-08-28 排查黑屏新增，二次修订）=====
         // 道具图鉴 = EXT[id] bit0 登记（Load 会遍历 640 道具对 qty>0 自动 |=1，SetItemQtyWithClamp

@@ -20,8 +20,97 @@ namespace TOAHEX
         /// <summary>3DS 系统存档大小（0x744）</summary>
         public const int DsSysSize = 1860;      // 0x744
 
+        /// <summary>
+        /// 尾部 B 段（0xB50C..0xB800 = 字段/摄像机参考区）映射分段：
+        /// (3DS 起, 3DS 止, delta)，PS2 源偏移 = 3DS 偏移 - delta。
+        /// 实测（本 PS2 档 ↔ TotA15 四份原生 3DS 档）该区整体 Δ=+24，但中间夹一段 3DS 专属插入：
+        ///   3DS 0xB530/0xB534 恒为 0x01010101×2（四档一致，PS2 无对应）→ 保留 native；
+        ///   其后 0xB538..0xB5D0 窗口 Δ 变为 +32（PS2 侧多出的 0xB5B0..0xB5B8 两个 dword 被丢弃）。
+        /// 分段后与原生档逐 dword 吻合度 174/189（朴素 +24 仅 151/189），
+        /// 且玩家位置副本恰好落在原生档的 0xB568/0xB574(X)、0xB57C(Z)。
+        /// </summary>
+        private static readonly (int Start, int End, int Delta)[] TailFieldSegments =
+        {
+            (0xB50C, 0xB530, 24),   // → PS2 0xB4F4..0xB518
+            (0xB538, 0xB5D0, 32),   // → PS2 0xB518..0xB5B0
+            (0xB5D0, 0xB800, 24)    // → PS2 0xB5B8..0xB7E8
+        };
+
+        /// <summary>3DS 专属插入区（0xB530..0xB538，无 PS2 对应）→ 整段保留 3DS(native)。</summary>
+        private const int TailDsOnlyInsertStart = 0xB530;
+        private const int TailDsOnlyInsertEnd = 0xB538;
+
+        /// <summary>
+        /// 4×120B 队伍编成预设块（3DS 10384..10864 = runtime+10084）。
+        /// 实测两版结构完全同构、文件 Δ 与主体一致(+4)；唯一差异是每条预设的 16 字节"预设名"
+        /// 文字编码（PS2 Shift-JIS ↔ 本地化 3DS ASCII）→ 名称保留 3DS(native) 以免乱码，
+        /// 其余字节从 PS2 带入以保留玩家自定义编成。
+        /// 若目标 3DS 为日版（名称同为 Shift-JIS），把 <see cref="PresetKeepNameFromTemplate"/> 设为 false。
+        /// </summary>
+        private const int PresetRecordBase = 10384;
+        private const int PresetRecordSize = 120;
+        private const int PresetRecordCount = 4;
+        private const int PresetNameSize = 16;
+        private const bool PresetKeepNameFromTemplate = true;
+
+        /// <summary>
+        /// 136B + 168B 块（3DS 10864..11168 = runtime+10564 / +10700）
+        /// 复核（2026-10-05 修正）：**并非 3DS 专有** —— PS2 打包 sub_37D5C0 由 obj+10540..10796
+        /// 写入 PS2 文件 10868..11172，PS2 加载 sub_37BDF0 亦恢复同区，是双方 1:1 真字段块
+        /// （文件 Δ 与主体一致 -4；源偏移 obj+10540↔rt+10564、obj+10676↔rt+10700，源 Δ=+24）。
+        /// => 由主体 +4 复制带入即可，不做 native 覆盖（旧版仅覆盖首 4 字节 11000 同样多余）。
+        /// 注：本 PS2 档该区全为 0；TotA15 三份中后期 3DS 档在 168B 块内为同一组参考值
+        /// (0x2B00..0x2B0F)，早期档为 0 —— 属 3DS 端状态差异，非结构性差异。
+        /// </summary>
+        private const int PresetBlockRegion = 10864;   // 仅作文档记录，当前无需特判
+
         /// <summary>主存档头部长度（0x214），写入头部字段 @0x0C</summary>
         private const int HeaderSize = 0x214;
+
+        /// <summary>
+        /// 尾部 A 段结束（0xB50C）。0xB2C8..0xB50C 为运行时结构：3DS 侧密集存放 3DS 堆指针
+        /// （0x0048xxxx / 0x0879xxxx），PS2 侧同槽位是索引/小整数，两版数据模型不同，
+        /// 只能保留 3DS(native) 模板值。
+        /// </summary>
+        private const int TailPointerArrayEnd = 0xB50C;
+
+        /// <summary>
+        /// 尾部 B 段结束（0xB800）。0xB50C..0xB800 为字段/摄像机参考区（PS2 侧 0xB4F4..0xB7E8），
+        /// 两版同构、整体 Δ=+24（实测 PS2 0xB600/0xB700/0xB7A0 ↔ 3DS 0xB618/0xB718/0xB7B8 逐 dword 全等），
+        /// 含玩家/摄像机参考坐标。旧版整段回写模板值是"摄像机坐标不对应"的根因。
+        /// </summary>
+        private const int TailFieldRegionEnd = 0xB800;
+
+        /// <summary>
+        /// 平台指针带（0x00100000..0x09000000），同时覆盖 3DS 主存/堆指针（0x0048xxxx / 0x0879xxxx）
+        /// 与 PS2 主存指针（0x001xxxxx）。落在该带内的槽视为"平台指针槽"，两侧地址不可迁移。
+        /// </summary>
+        private const uint PointerBandLo = 0x00100000;
+        private const uint PointerBandHi = 0x09000000;
+
+        private static bool IsPlatformPointer(uint value)
+        {
+            return value >= PointerBandLo && value < PointerBandHi;
+        }
+
+        /// <summary>
+        /// 尾部字段区（0xB50C..0xB800）指针槽保护：
+        /// 任一侧落在指针带内（模板侧 = 3DS 指针；PS2 源侧 = PS2 指针），
+        /// 该槽一律还原为 3DS(native) 模板值，避免把 PS2 地址写进 3DS 指针槽；
+        /// 其余槽位保留来自 PS2 的数据（分段复制已按对应 delta 带入）。
+        /// </summary>
+        private static void RestorePointerSlots(byte[] dst, byte[] template, byte[] ps2Src,
+                                                int start, int end, int delta)
+        {
+            for (int off = start; off < end; off += 4)
+            {
+                if (IsPlatformPointer(BitConverter.ToUInt32(template, off)) ||
+                    IsPlatformPointer(BitConverter.ToUInt32(ps2Src, off - delta)))
+                {
+                    Buffer.BlockCopy(template, off, dst, off, 4);
+                }
+            }
+        }
 
         // 与 Python DS_MAIN_OPTIONS 完全一致（36字节，写入 3DS 主档 43980..44016 的 3DS 专属选项区）
         private static readonly byte[] DsMainOptions =
@@ -109,20 +198,42 @@ namespace TOAHEX
             Buffer.BlockCopy(ps2Main, 0x530, dst, 0x52C, 4);
             Buffer.BlockCopy(ps2Main, 0x534, dst, 0x530, 0x10);
 
-            // native 覆盖区：尾部静态区 0xB2C8..0xB800
-            // 3DS 此处为运行时菜单结构/静态浮点配置（含疑似摄像机参数），
-            // 从 PS2 复制会破坏 3DS 摄像机，必须回写 3DS（native）模板值
-            Buffer.BlockCopy(template, 0xB2C8, dst, 0xB2C8, 0xB800 - 0xB2C8);
+            // native 覆盖区：尾部 A 段 0xB2C8..0xB50C
+            // 3DS 此处为运行时结构（密集 3DS 堆指针 0x0048xxxx / 0x0879xxxx），PS2 同槽位为索引/小整数。
+            // 从 PS2 复制会把 PS2 地址写进 3DS 指针槽 → 必须回写 3DS（native）模板值。
+            Buffer.BlockCopy(template, 0xB2C8, dst, 0xB2C8, TailPointerArrayEnd - 0xB2C8);
 
-            // native 覆盖区：0x2284 处浮点（若映射后与模板不一致，则强制回写模板原始字节）
-            if (BitConverter.ToSingle(dst, 0x2284) != BitConverter.ToSingle(template, 0x2284))
+            // 尾部 B 段 0xB50C..0xB800（字段/摄像机参考区，PS2 源区 0xB4F4..0xB7E8）：
+            // 两版同构但 Δ 分段（见 TailFieldSegments），含玩家/摄像机参考坐标（玩家 X/Z 在此区重现）。
+            // 旧版把整段回写成模板值是"玩家坐标对、摄像机坐标不对"的根因。
+            foreach (var (segStart, segEnd, delta) in TailFieldSegments)
             {
-                Buffer.BlockCopy(template, 0x2284, dst, 0x2284, 4);
+                Buffer.BlockCopy(ps2Main, segStart - delta, dst, segStart, segEnd - segStart);
+                RestorePointerSlots(dst, template, ps2Main, segStart, segEnd, delta);
             }
 
-            // native 覆盖区：静态表 10384..10864（480 字节）与 11000 处 4 字节，强制使用 3DS 模板值
-            Buffer.BlockCopy(template, 10384, dst, 10384, 480);
-            Buffer.BlockCopy(template, 11000, dst, 11000, 4);
+            // 3DS 专属插入区（0xB530..0xB538）整段保留 3DS(native)
+            Buffer.BlockCopy(template, TailDsOnlyInsertStart, dst, TailDsOnlyInsertStart,
+                             TailDsOnlyInsertEnd - TailDsOnlyInsertStart);
+
+            // 0x2284：原"若与模板不一致则强制回写模板"的浮点特判已删除（2026-10-05 复核）：
+            //   3DS 0x2284 = PS2 0x2288 = 800.0（两版恒为常量 0x44480000），主体 +4 复制已正确落位，
+            //   该特判在实测四档中恒为 no-op。
+
+            // 4×120B 队伍编成预设块：非名称部分从 PS2 带入，名称字段保留 3DS(native) 以免编码乱码。
+            for (int k = 0; k < PresetRecordCount; k++)
+            {
+                int rec = PresetRecordBase + PresetRecordSize * k;
+                Buffer.BlockCopy(ps2Main, rec + PresetNameSize + 4, dst,
+                                 rec + PresetNameSize, PresetRecordSize - PresetNameSize);
+                if (PresetKeepNameFromTemplate)
+                {
+                    Buffer.BlockCopy(template, rec, dst, rec, PresetNameSize);
+                }
+            }
+
+            // 136B+168B 块（3DS 10864..11168）为双方 1:1 真字段块（PS2 sub_37D5C0 存 / sub_37BDF0 取），
+            // 已由上方主体 +4 复制正确带入，故不再做 native 覆盖。
 
             // 头部字段：@0x0C = 头部长度 0x214；@0x10 = 头部校验和；@0x14 = 主体校验和
             PutU32(dst, 0x0C, 0x214);

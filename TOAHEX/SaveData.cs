@@ -553,6 +553,10 @@ namespace TOAHEX
         /// N3ds 原样返回；PS2 主档按区间平移（同位区 / +4 / -24），3DS 专属常量区
         /// (0xABCC-0xABF0) 无对应字节则抛异常；PS2 系统档 [0,1552) 同位、其后 -28。
         /// 翻译只发生在本类私有原语内部，公开 API 绝不双重翻译。
+        /// ⚠ 例外：字段/摄像机参考区 0xB50C..0xB800 内 0xB538..0xB5D0 窗口的 Δ 为 +32
+        ///   （见 SaveOffsets.FIELD_REF_SEGMENTS；另 0xB530..0xB538 为 3DS 专属插入、无 PS2 对应）。
+        ///   本函数用统一 +24 平移在该窗口会差 8 字节；该区为运行时参考数据、编辑器不读写，
+        ///   故未特判。若要在此区定位 PS2 字节请用 SaveOffsets.FIELD_REF_SEGMENTS 逐段换算。
         /// </summary>
         private int MapOffset(int offset)
         {
